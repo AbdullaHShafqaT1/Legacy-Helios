@@ -1,0 +1,45 @@
+# ==========================================
+# Legacy's Predator - EditorConfig
+# ==========================================
+
+# Topmost EditorConfig file
+root = true
+
+# Standard settings for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Python
+[*.py]
+indent_size = 4
+
+# JavaScript / TypeScript / Frontend Web
+[*.{js,jsx,ts,tsx,html,css,scss,less}]
+indent_size = 2
+
+# Configuration / Markup
+[*.{json,yaml,yml,toml,xml}]
+indent_size = 2
+
+# Markdown
+[*.{md,markdown}]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# Go (uses tabs)
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# Shell scripts / Windows scripts
+[*.{sh,bash,ps1}]
+indent_size = 2
+
+# Makefiles (require tabs)
+[Makefile]
+indent_style = tab
+indent_size = 4

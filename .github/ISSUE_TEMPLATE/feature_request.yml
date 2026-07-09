@@ -1,0 +1,46 @@
+name: 🚀 Feature Request
+description: Propose a new feature, agent tool, or connector for Legacy's Predator
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make Predator OS better? We'd love to hear it!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem is.
+      placeholder: I always struggle when trying to...
+    validations:
+      required: false
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the Solution You'd Like
+      description: A clear and concise description of what you want to happen.
+      placeholder: Add a new connector for X, which exposes APIs to Y...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe Alternatives You've Considered
+      description: A clear and concise description of any alternative solutions or features you've considered.
+      placeholder: Alternatively, we could build a custom shell script that...
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context, design sketches, or screenshots.
+      placeholder: E.g., API schemas, library URLs, mockups...
+  - type: checkboxes
+    id: checklists
+    attributes:
+      label: Verification
+      options:
+        - label: I have searched existing issues to ensure this feature has not been requested before.
+          required: true

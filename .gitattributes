@@ -1,0 +1,61 @@
+# ==========================================
+# Legacy's Predator - Git Attributes Config
+# ==========================================
+
+# Set default behavior to automatically handle line endings and enforce LF
+* text=auto eol=lf
+
+# Explicitly declare text files to always use LF on checkout
+*.txt text eol=lf
+*.md text eol=lf
+*.markdown text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+
+# Code files
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.go text eol=lf
+*.rs text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+
+# Configs and editor files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+.env text eol=lf
+
+# Scripts
+*.sh text eol=lf
+*.ps1 text eol=lf
+
+# Windows batch files must use CRLF to execute properly
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets - do not apply line-ending transformations
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.mp4 binary
+*.mp3 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
