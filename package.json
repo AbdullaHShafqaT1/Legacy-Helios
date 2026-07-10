@@ -1,0 +1,26 @@
+{
+  "name": "jarvis",
+  "version": "0.1.0",
+  "description": "Jarvis - Autonomous AI Operating System Kernel",
+  "main": "dist/core/src/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx core/src/index.ts",
+    "cli": "tsx cli/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "better-sqlite3": "^11.1.2",
+    "dotenv": "^16.4.5",
+    "pino": "^9.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.9",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.2",
+    "vitest": "^1.6.0"
+  }
+}

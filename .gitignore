@@ -157,3 +157,7 @@ prompts_cache/
 *.h5
 *.pb
 *.tflite
+
+# --- Jarvis Phase 1 Memory Store ---
+/memory-store/*
+!/memory-store/.gitkeep
