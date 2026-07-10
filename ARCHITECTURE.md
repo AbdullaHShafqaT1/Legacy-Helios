@@ -1,12 +1,12 @@
 # System Architecture
 
-This document describes the architectural layout, system components, and interaction patterns within **Legacy's Predator**.
+This document describes the architectural layout, system components, and interaction patterns within **Legacy's Helios**.
 
 ---
 
 ## Architecture Overview
 
-Predator OS follows a modular microkernel design. The core engine is thin and focused solely on process management (agent executions), event routing, and resource authorization. All utility systems (databases, tools, vector indexing, web servers) are decoupled and run as separate services or connectors.
+Helios OS follows a modular microkernel design. The core engine is thin and focused solely on process management (agent executions), event routing, and resource authorization. All utility systems (databases, tools, vector indexing, web servers) are decoupled and run as separate services or connectors.
 
 ```
 +-----------------------------------------------------------------+

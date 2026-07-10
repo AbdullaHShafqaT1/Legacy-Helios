@@ -1,12 +1,12 @@
 # Development Plan & Local Setup Guide
 
-This document outlines standard development patterns, environment dependencies, testing setups, and code deployment patterns for developers contributing code to **Legacy's Predator**.
+This document outlines standard development patterns, environment dependencies, testing setups, and code deployment patterns for developers contributing code to **Legacy's Helios**.
 
 ---
 
 ## 🛠️ System Prerequisites
 
-To run and compile Predator OS locally, your development machine should have:
+To run and compile Helios OS locally, your development machine should have:
 
 1. **Python 3.10+** (using `venv` or `poetry` for package dependencies).
 2. **Node.js 18+** (with `pnpm` or `npm` for building the visual web interface).
@@ -19,8 +19,8 @@ To run and compile Predator OS locally, your development machine should have:
 
 ### 1. Clone and Setup Workspace
 ```bash
-git clone https://github.com/AbdullaHShafqaT1/Legacys-Predator.git
-cd Legacys-Predator
+git clone https://github.com/AbdullaHShafqaT1/Legacys-Helios.git
+cd Legacys-Helios
 ```
 
 ### 2. Configure Virtual Environment (Python)

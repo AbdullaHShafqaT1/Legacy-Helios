@@ -1,4 +1,4 @@
-# Legacy's Predator (Predator OS)
+# Legacy's Helios (Helios OS)
 
 > **A modular, autonomous AI Operating System designed for software engineering, automation, scientific research, and deep productivity.**
 
@@ -11,7 +11,7 @@
 
 ## 👁️ Project Vision & Purpose
 
-**Legacy's Predator** is a blueprint and codebase foundation for a next-generation **AI Operating System**. Unlike standard operating systems that manage hardware resources for human users via static graphical interfaces, Predator OS orchestrates AI agents, semantic memory spaces, automated tools, and live environment connectors to serve as a fully autonomous software engineering, research, and workspace automation kernel.
+**Legacy's Helios** is a blueprint and codebase foundation for a next-generation **AI Operating System**. Unlike standard operating systems that manage hardware resources for human users via static graphical interfaces, Helios OS orchestrates AI agents, semantic memory spaces, automated tools, and live environment connectors to serve as a fully autonomous software engineering, research, and workspace automation kernel.
 
 Our mission is to build a highly modular, secure, and extensible operating layer where autonomous agents can execute long-running tasks, coordinate with other agents, self-correct, and securely interact with the physical and digital world.
 
@@ -28,7 +28,7 @@ Our mission is to build a highly modular, secure, and extensible operating layer
 
 ## 🏛️ Planned Architecture
 
-Predator OS separates system modules into clean, orthogonal layers:
+Helios OS separates system modules into clean, orthogonal layers:
 
 ```
 +-------------------------------------------------------------------+

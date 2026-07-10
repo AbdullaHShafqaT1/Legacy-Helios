@@ -10,7 +10,7 @@ Currently, this repository is in its initial design phase. Standard support poli
 
 ## Reporting a Vulnerability
 
-We take the security of **Legacy's Predator** very seriously. If you find a security vulnerability, please do not open a public issue. Doing so risks exposing the exploit to public exploitation before a patch can be developed.
+We take the security of **Legacy's Helios** very seriously. If you find a security vulnerability, please do not open a public issue. Doing so risks exposing the exploit to public exploitation before a patch can be developed.
 
 Instead, please report vulnerabilities by contacting the maintainers directly:
 * Email: `security@legacystudios.org` (or contact `AbdullaHShafqaT1` on GitHub)

@@ -1,12 +1,12 @@
 # Agent Specification & Design Patterns
 
-This document defines the interface standards, state machine patterns, and persona structures for autonomous agents running on **Legacy's Predator**.
+This document defines the interface standards, state machine patterns, and persona structures for autonomous agents running on **Legacy's Helios**.
 
 ---
 
 ## 🧠 Agent Design Philosophy
 
-Agents in Predator OS are modelled as isolated runtime processes. Each agent possesses:
+Agents in Helios OS are modelled as isolated runtime processes. Each agent possesses:
 1. **Persona Schema**: A descriptive blueprint defining the system instructions, tone, and operational boundaries of the agent.
 2. **State Machine**: An event-driven state router (e.g. *Idle -> Initializing -> Executing -> Reasoning -> Evaluating -> Completed*).
 3. **Tool Access Scope**: A strictly defined whitelist of executable tools.

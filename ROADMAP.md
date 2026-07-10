@@ -1,6 +1,6 @@
-# Legacy's Predator - Development Roadmap
+# Legacy's Helios - Development Roadmap
 
-This roadmap outlines the long-term vision and phases of development for the **Legacy's Predator** AI Operating System.
+This roadmap outlines the long-term vision and phases of development for the **Legacy's Helios** AI Operating System.
 
 ---
 
@@ -35,4 +35,4 @@ This roadmap outlines the long-term vision and phases of development for the **L
 * **Deliverables**:
   - [ ] **React / Next.js Admin Dashboard**: Glassmorphic, modern dashboard displaying execution logs, agent graphs, and CPU/token metrics.
   - [ ] **Cloud Workspace Connector**: Integrations for spinning up Docker instances and SSH remote development containers.
-  - [ ] **API Registry**: REST/WebSocket service interface allowing third-party tools to orchestrate Predator OS.
+  - [ ] **API Registry**: REST/WebSocket service interface allowing third-party tools to orchestrate Helios OS.

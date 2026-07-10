@@ -1,6 +1,6 @@
-# Legacy's Predator - Architecture Decision Records (ADRs)
+# Legacy's Helios - Architecture Decision Records (ADRs)
 
-This directory documents the technical decisions, design trade-offs, and architecture pivots made over the lifecycle of **Legacy's Predator**.
+This directory documents the technical decisions, design trade-offs, and architecture pivots made over the lifecycle of **Legacy's Helios**.
 
 ## ADR Status Definitions
 

@@ -1,4 +1,4 @@
-# Legacy's Predator - System Design & UX
+# Legacy's Helios - System Design & UX
 
 This directory focuses on UX, design guides, API layouts, and protocol specifications for the system's human and machine interfaces.
 
@@ -10,6 +10,6 @@ This directory focuses on UX, design guides, API layouts, and protocol specifica
 
 ## Interface Specs (Planned)
 
-- **Predator CLI**: A terminal-based developer control panel.
-- **Predator UI**: Web-based visual dashboard for monitoring agent chains, memory allocation, and tool execution status.
+- **Helios CLI**: A terminal-based developer control panel.
+- **Helios UI**: Web-based visual dashboard for monitoring agent chains, memory allocation, and tool execution status.
 - **Agent Protocol**: Standard JSON-RPC or gRPC schemas for agent communication.

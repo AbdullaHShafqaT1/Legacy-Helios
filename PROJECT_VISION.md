@@ -1,6 +1,6 @@
 # Project Vision & Philosophy
 
-**Legacy's Predator** is born out of a simple observation: AI models are transitioning from static chat assistants into autonomous, persistent computational systems. Traditional operating systems are built for humans to manage hardware resources. **Predator OS** is built for AI to orchestrate software resources.
+**Legacy's Helios** is born out of a simple observation: AI models are transitioning from static chat assistants into autonomous, persistent computational systems. Traditional operating systems are built for humans to manage hardware resources. **Helios OS** is built for AI to orchestrate software resources.
 
 ---
 

@@ -1,6 +1,6 @@
-# Contributing to Legacy's Predator
+# Contributing to Legacy's Helios
 
-Thank you for your interest in contributing to **Legacy's Predator**! We aim to build a clean, production-grade AI Operating System, and we welcome contributions from developers, researchers, and creators.
+Thank you for your interest in contributing to **Legacy's Helios**! We aim to build a clean, production-grade AI Operating System, and we welcome contributions from developers, researchers, and creators.
 
 Following these guidelines helps ensure a smooth, collaborative workflow for everyone.
 

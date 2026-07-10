@@ -1,6 +1,6 @@
-# Legacy's Predator - Architecture Documentation
+# Legacy's Helios - Architecture Documentation
 
-This directory contains detailed technical documentation of the system architecture of **Legacy's Predator**.
+This directory contains detailed technical documentation of the system architecture of **Legacy's Helios**.
 
 ## Directory Contents
 

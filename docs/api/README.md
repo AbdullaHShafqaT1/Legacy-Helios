@@ -1,6 +1,6 @@
-# Legacy's Predator - API Specifications
+# Legacy's Helios - API Specifications
 
-This directory contains the specifications for the APIs exposed by the **Legacy's Predator** operating system layer.
+This directory contains the specifications for the APIs exposed by the **Legacy's Helios** operating system layer.
 
 ## Core API Interfaces
 
