@@ -19,8 +19,8 @@ To run and compile Helios OS locally, your development machine should have:
 
 ### 1. Clone and Setup Workspace
 ```bash
-git clone https://github.com/AbdullaHShafqaT1/Legacys-Helios.git
-cd Legacys-Helios
+git clone https://github.com/AbdullaHShafqaT1/Legacy-Helios.git
+cd Legacy-Helios
 ```
 
 ### 2. Configure Virtual Environment (Python)

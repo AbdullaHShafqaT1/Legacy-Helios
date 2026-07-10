@@ -10,4 +10,4 @@ This directory contains details about the development roadmap and release cycles
   - **Milestone 0.2.0 (Beta)**: Multi-agent coordination protocols, semantic memory retrieval via vector databases, and interactive UI web client.
   - **Milestone 1.0.0 (Production)**: Fully sandboxed operating environment, multi-platform connectors, and enterprise-grade security and role-based access.
 
-For tracking active sprints and issues, please see the [GitHub Issues](https://github.com/AbdullaHShafqaT1/Legacys-Helios/issues).
+For tracking active sprints and issues, please see the [GitHub Issues](https://github.com/AbdullaHShafqaT1/Legacy-Helios/issues).
