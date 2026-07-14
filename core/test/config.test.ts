@@ -44,7 +44,7 @@ describe('Configuration Loader', () => {
   it('should apply documented defaults for optional variables', () => {
     const config = loadConfig(false);
     expect(config.dbPath).toBe('memory-store/jarvis.db');
-    expect(config.model).toBe('claude-3-5-sonnet-latest');
+    expect(config.model).toBe('claude-sonnet-4-6');
     expect(config.maxRetries).toBe(3);
     expect(config.pollIntervalMs).toBe(5000);
     expect(config.staleTaskTimeoutMs).toBe(300000);
