@@ -1,19 +1,51 @@
-import { loadConfig } from './lib/config.js';
-import { createLogger } from './lib/logger.js';
+import { ConfigError } from './lib/config.js';
+import { bootstrap } from './bootstrap.js';
+import { createStdinApprovalPrompt } from './lib/prompt.js';
+import { Orchestrator, defaultStopSignalPath } from './orchestrator.js';
 
-const log = createLogger('core-startup');
+let orchestrator: Orchestrator | null = null;
+let dbInstance: any = null;
 
 try {
-  log.info('Starting Jarvis Core Engine (Phase 1)...');
-  // Load configuration with requireApiKey = false for scaffolding/testing startup.
-  const config = loadConfig(false);
-  log.info({ 
-    config: {
-      ...config,
-      anthropicApiKey: config.anthropicApiKey ? '[PRESENT]' : undefined
+  // Bootstrap the Jarvis OS daemon context
+  const ctx = bootstrap(createStdinApprovalPrompt(), 'jarvis-core');
+  dbInstance = ctx.db;
+
+  const stopSignalPath = defaultStopSignalPath(ctx.config.dbPath);
+
+  orchestrator = new Orchestrator(
+    ctx.queue,
+    ctx.agentRouter,
+    ctx.eventBus,
+    ctx.logger,
+    {
+      pollIntervalMs: ctx.config.pollIntervalMs,
+      staleTaskTimeoutMs: ctx.config.staleTaskTimeoutMs,
+      stopSignalPath,
     }
-  }, 'Jarvis Configuration loaded successfully');
+  );
+
+  orchestrator.start();
 } catch (error) {
-  log.error({ error }, 'Jarvis core engine startup failed due to configuration error');
-  process.exit(1);
+  if (error instanceof ConfigError) {
+    // Print clear configuration errors directly to stderr at startup
+    process.stderr.write(`FATAL: ${error.message}\n`);
+    process.exit(1);
+  }
+  // Let unexpected bootstrapping errors throw standard stack traces
+  throw error;
 }
+
+// Clean shutdown signal listeners
+function handleShutdown(signal: string): void {
+  if (orchestrator) {
+    orchestrator.stop();
+  }
+  if (dbInstance && dbInstance.open) {
+    dbInstance.close();
+  }
+  process.exit(0);
+}
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
