@@ -4,6 +4,9 @@
   "description": "Jarvis - Autonomous AI Operating System Kernel",
   "main": "dist/core/src/index.js",
   "type": "module",
+  "bin": {
+    "jarvis": "dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "tsx core/src/index.ts",
