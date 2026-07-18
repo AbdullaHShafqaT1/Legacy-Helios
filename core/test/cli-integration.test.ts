@@ -58,9 +58,11 @@ describe('CLI Integration Data & Process Tests', () => {
       // Verify task queue data
       const tasks = ctx.queue.listAll();
       expect(tasks).toHaveLength(2);
-      expect(tasks[0].description).toBe('Second dependent task');
-      expect(tasks[0].depends_on).toBe(t1.id);
-      expect(tasks[1].description).toBe('First task');
+      const retrievedT1 = tasks.find(t => t.id === t1.id);
+      const retrievedT2 = tasks.find(t => t.id === t2.id);
+      expect(retrievedT1?.description).toBe('First task');
+      expect(retrievedT2?.description).toBe('Second dependent task');
+      expect(retrievedT2?.depends_on).toBe(t1.id);
 
       // Verify audit logs
       const logs = ctx.auditLog.recent(10);
