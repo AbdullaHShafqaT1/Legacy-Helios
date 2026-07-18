@@ -97,17 +97,15 @@ async function run(): Promise<void> {
     if (command === 'submit') {
       const description = positional[0]?.trim();
       if (!description) {
-        process.stderr.write('Error: Task description is required for submit command.\n');
         printHelp();
-        process.exit(1);
+        throw new Error('Task description is required for submit command.');
       }
 
       let priority: number | undefined;
       if (flags['priority']) {
         priority = parseInt(flags['priority'], 10);
         if (isNaN(priority)) {
-          process.stderr.write('Error: Flag --priority must be an integer.\n');
-          process.exit(1);
+          throw new Error('Flag --priority must be an integer.');
         }
       }
 
@@ -119,8 +117,7 @@ async function run(): Promise<void> {
       if (flags['max-retries']) {
         maxRetries = parseInt(flags['max-retries'], 10);
         if (isNaN(maxRetries)) {
-          process.stderr.write('Error: Flag --max-retries must be an integer.\n');
-          process.exit(1);
+          throw new Error('Flag --max-retries must be an integer.');
         }
       }
 
@@ -172,8 +169,7 @@ async function run(): Promise<void> {
       if (flags['limit']) {
         limit = parseInt(flags['limit'], 10);
         if (isNaN(limit) || limit <= 0) {
-          process.stderr.write('Error: Flag --limit must be a positive integer.\n');
-          process.exit(1);
+          throw new Error('Flag --limit must be a positive integer.');
         }
       }
 
@@ -217,7 +213,7 @@ async function run(): Promise<void> {
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     if (ctx && ctx.db) {
       ctx.db.close();
