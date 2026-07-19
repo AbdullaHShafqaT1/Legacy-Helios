@@ -68,12 +68,15 @@ export class SoftwareEngineerAgent implements Agent {
     });
 
     if (!authorization.granted) {
+      const outcomeText = authorization.denialReason === 'timeout'
+        ? 'denied — timeout'
+        : 'denied — no write performed';
       // Record failed outcome in the audit log
       this.auditLog.recordOutcome(
         authorization.correlationId,
         this.name,
         'file-write',
-        'denied — no write performed'
+        outcomeText
       );
 
       return {

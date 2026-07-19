@@ -31,6 +31,7 @@ export interface TaskRow {
   heartbeat_at: string | null;
   created_at: string;
   updated_at: string;
+  sequence_id: number;
 }
 
 /**
@@ -90,8 +91,8 @@ export class TaskQueue {
 
     const insertStmt = this.db.prepare(`
       INSERT INTO tasks (
-        id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at
-      ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?)
+        id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id
+      ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks))
     `);
 
     insertStmt.run(
@@ -124,7 +125,7 @@ export class TaskQueue {
    * Lists all tasks in the queue, ordered from newest to oldest.
    */
   listAll(): TaskRow[] {
-    return this.db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all() as TaskRow[];
+    return this.db.prepare('SELECT * FROM tasks ORDER BY sequence_id DESC').all() as TaskRow[];
   }
 
   /**
@@ -137,11 +138,11 @@ export class TaskQueue {
     // 1. Resolve blocked dependencies first
     this.resolveBlockedDependencies();
 
-    // 2. Fetch pending tasks sorted by priority DESC, created_at ASC
+    // 2. Fetch pending tasks sorted by priority DESC, sequence_id ASC
     const candidates = this.db.prepare(`
       SELECT * FROM tasks
       WHERE status = 'pending'
-      ORDER BY priority DESC, created_at ASC
+      ORDER BY priority DESC, sequence_id ASC
     `).all() as TaskRow[];
 
     for (const candidate of candidates) {

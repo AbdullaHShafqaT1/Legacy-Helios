@@ -65,6 +65,26 @@ describe('TaskQueue Class', () => {
     expect(third?.id).toBe('t1');
   });
 
+  it('should claimNext deterministically using sequence_id for tasks enqueued in the same millisecond', () => {
+    queue.enqueue({ id: 'task-a', description: 'First enqueued', priority: 5 });
+    queue.enqueue({ id: 'task-b', description: 'Second enqueued', priority: 5 });
+    queue.enqueue({ id: 'task-c', description: 'Third enqueued', priority: 5 });
+
+    // Force identical timestamps in database
+    const sameTime = new Date().toISOString();
+    db.prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id IN ('task-a', 'task-b', 'task-c')").run(sameTime, sameTime);
+
+    // Dequeue them and assert order matches insertion sequence
+    const firstClaimed = queue.claimNext('agent-1');
+    expect(firstClaimed?.id).toBe('task-a');
+
+    const secondClaimed = queue.claimNext('agent-1');
+    expect(secondClaimed?.id).toBe('task-b');
+
+    const thirdClaimed = queue.claimNext('agent-1');
+    expect(thirdClaimed?.id).toBe('task-c');
+  });
+
   it('should not claim a task whose dependency has not completed', () => {
     queue.enqueue({ id: 'parent', description: 'Parent task' });
     queue.enqueue({ id: 'child', description: 'Child task', dependsOn: 'parent' });

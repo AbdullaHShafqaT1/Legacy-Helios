@@ -159,4 +159,37 @@ describe('SoftwareEngineerAgent', () => {
     expect(mockGatekeeper.authorize).not.toHaveBeenCalled();
     expect(mockAuditLog.recordOutcome).not.toHaveBeenCalled();
   });
+
+  it('should return failure status and log denied — timeout when gatekeeper times out', async () => {
+    mockModelRouter.route.mockResolvedValue({ text: 'Timeout model content' });
+    mockGatekeeper.authorize.mockResolvedValue({
+      granted: false,
+      correlationId: 'corr-timeout-123',
+      denialReason: 'timeout'
+    });
+
+    const testFilePath = path.join(tempDir, 'timeout_file.txt');
+
+    const result = await agent.process({
+      taskId: 'task-timeout',
+      description: 'Write file content with timeout',
+      fileContext: { targetPath: testFilePath }
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBe('permission-denied');
+    expect(result.filesChanged).toEqual([]);
+
+    // Confirm no file was written
+    expect(fs.existsSync(testFilePath)).toBe(false);
+
+    // Confirm auditLog.recordOutcome was called once with "denied — timeout"
+    expect(mockAuditLog.recordOutcome).toHaveBeenCalledTimes(1);
+    expect(mockAuditLog.recordOutcome).toHaveBeenCalledWith(
+      'corr-timeout-123',
+      'software-engineer',
+      'file-write',
+      'denied — timeout'
+    );
+  });
 });

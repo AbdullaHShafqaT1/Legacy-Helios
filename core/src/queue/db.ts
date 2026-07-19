@@ -61,11 +61,23 @@ export function openDb(dbPath: string): Database.Database {
       heartbeat_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      sequence_id INTEGER,
       FOREIGN KEY (depends_on) REFERENCES tasks (id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
     CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks (priority);
+    CREATE INDEX IF NOT EXISTS idx_tasks_sequence_id ON tasks (sequence_id);
+
+    CREATE TRIGGER IF NOT EXISTS trg_tasks_sequence_id
+    AFTER INSERT ON tasks
+    FOR EACH ROW
+    WHEN NEW.sequence_id IS NULL
+    BEGIN
+      UPDATE tasks
+      SET sequence_id = (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks)
+      WHERE id = NEW.id;
+    END;
 
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +106,26 @@ export function openDb(dbPath: string): Database.Database {
       SELECT RAISE(ABORT, 'Audit log entries are immutable and cannot be deleted.');
     END;
   `;
+
+  // Run migration check if table 'tasks' already exists before executing schemaDdl
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'").get();
+  if (tableExists) {
+    const tableInfo = db.pragma('table_info(tasks)') as { name: string }[];
+    const hasSequenceColumn = tableInfo.some(col => col.name === 'sequence_id');
+    if (!hasSequenceColumn) {
+      db.exec('ALTER TABLE tasks ADD COLUMN sequence_id INTEGER');
+      // Backfill sequence_id sequentially based on insertion order (rowid)
+      db.exec(`
+        UPDATE tasks
+        SET sequence_id = (
+          SELECT COUNT(*)
+          FROM tasks t2
+          WHERE t2.rowid <= tasks.rowid
+        )
+        WHERE sequence_id IS NULL
+      `);
+    }
+  }
 
   db.exec(schemaDdl);
 

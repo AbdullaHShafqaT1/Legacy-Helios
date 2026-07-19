@@ -1,6 +1,7 @@
 import { Logger } from 'pino';
 import { AuditLog } from './auditLog.js';
 import { redactSecrets } from '../lib/redact.js';
+import { TimeoutError } from '../lib/prompt.js';
 
 export type GuardedAction = 'file-write' | 'file-delete';
 
@@ -16,6 +17,7 @@ export interface PermissionRequest {
 export interface PermissionDecision {
   granted: boolean;
   correlationId: string;
+  denialReason?: 'explicit' | 'timeout' | 'error';
 }
 
 export type ApprovalPrompt = (request: PermissionRequest) => Promise<boolean>;
@@ -45,17 +47,27 @@ export class PermissionGatekeeper {
    */
   async authorize(request: PermissionRequest): Promise<PermissionDecision> {
     let approved = false;
+    let denialReason: 'explicit' | 'timeout' | 'error' | undefined;
 
     try {
       approved = await this.approvalPrompt(request);
-    } catch (error) {
-      // Redact error trace arguments before passing to warn log
-      const redactedError = redactSecrets(error);
-      this.logger.warn(
-        { error: redactedError, requestActor: request.actor, requestAction: request.action },
-        'Approval prompt threw an error. Defaulting to deny-by-default.'
-      );
-      approved = false;
+      if (!approved) {
+        denialReason = 'explicit';
+      }
+    } catch (error: any) {
+      if (error instanceof TimeoutError) {
+        approved = false;
+        denialReason = 'timeout';
+      } else {
+        // Redact error trace arguments before passing to warn log
+        const redactedError = redactSecrets(error);
+        this.logger.warn(
+          { error: redactedError, requestActor: request.actor, requestAction: request.action },
+          'Approval prompt threw an error. Defaulting to deny-by-default.'
+        );
+        approved = false;
+        denialReason = 'error';
+      }
     }
 
     const correlationId = this.auditLog.recordDecision({
@@ -73,14 +85,15 @@ export class PermissionGatekeeper {
       );
     } else {
       this.logger.warn(
-        { correlationId, actor: request.actor, action: request.action, path: request.params.path },
+        { correlationId, actor: request.actor, action: request.action, path: request.params.path, denialReason },
         'Permission request DENIED.'
       );
     }
 
     return {
       granted: approved,
-      correlationId
+      correlationId,
+      denialReason
     };
   }
 }

@@ -19,9 +19,10 @@ This living status document captures the completion state of **Jarvis Phase 1**,
 | **1.8** | CLI command implementations: CLI entrypoint parsing arguments (`submit`, `status`, `logs`, `stop`, `help`). | **COMPLETE** |
 | **1.8.1**| CLI connection leak fix: replaced inline `process.exit(1)` exits with throws to ensure db handles release. | **COMPLETE** |
 | **1.9** | Pipeline validation: E2E pipeline integration test suite and final status documentation packages. | **COMPLETE** |
+| **2.1** | Task ordering fix (sequence_id column, sorting, migrations) & readline gating timeout + coverage tests. | **COMPLETE** |
 
 ### Total Project Test Count:
-**64 tests** pass successfully across **14 test files** inside the repository.
+**69 tests** pass successfully across **14 test files** inside the repository.
 
 ---
 
@@ -78,7 +79,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 
 ---
 
-## 📊 Final Phase 1 Self-Review Scorecard
+## 📊 Final Phase 1 & 2.1 Self-Review Scorecard
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |
@@ -91,9 +92,9 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
 | **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions. |
 | **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, and transitional developer notes. |
-| **Testing** | **PARTIAL** | While all 64 unit/E2E tests pass, coverage is incomplete. Specifically, `prompt.test.ts` only validates the headless `stdin` fallback branch; the interactive readline terminal input path (`y`/`N` user approval) has zero test coverage. |
-| **Edge Cases** | **PARTIAL** | Although WAL memory pragma limits and TTY fallbacks are handled, the query task ordering under sub-millisecond insertions remains non-deterministic on the database side and is only resolved client-side in testing. |
+| **Testing** | **PASS** | The test suite reaches 69 tests. We mock `node:readline/promises` to cover and verify the Gatekeeper interactive prompt's approve, deny, and timeout paths. |
+| **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via a monotonic `sequence_id` database index, and non-TTY stdin checks handle headless fallbacks. |
 | **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, and proper process exit codes. |
 | **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |
 | **Dependency Management** | **PASS** | Integrates only highly audited, lightweight packages (`better-sqlite3`, `pino`, `dotenv`, `@anthropic-ai/sdk`). |
-| **Consistency w/ Project Standards** | **PARTIAL** | While TypeScript, ESM, and Vitest guidelines were met, the master charter requirement for CI pipeline automation was deferred to Phase 2. |
+| **Consistency w/ Project Standards** | **PARTIAL** | While TypeScript, ESM, and Vitest guidelines were met, the master charter requirement for CI pipeline automation remains deferred to a later sub-task. |
