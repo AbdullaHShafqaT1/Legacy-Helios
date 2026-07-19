@@ -167,6 +167,7 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
     const task = queue.enqueue({
       description: 'Write restricted script file',
       fileContext: { targetPath },
+      maxRetries: 0,
     });
 
     orchestrator.start();

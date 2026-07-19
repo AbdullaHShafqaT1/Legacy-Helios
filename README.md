@@ -175,7 +175,8 @@ This runs 64 unit, integration, and subprocess child-process E2E pipeline tests.
 
 1. **Process-Wide Config Cache**: Configurations are cached process-wide inside `config.ts` after the first call. Tests or scripts updating environment variables mid-execution must call `clearConfigCache()` to reload settings.
 2. **Non-Interactive Stdin Limitations**: In background tasks or CI/CD pipelines, stdin cannot block for input. Gated filesystem writes will default to `false` (denied) in these environments.
-3. **Double Polling Interval Ticks**: The Orchestrator re-arms its timeout loop after completing a cycle. If a cycle is skipped due to in-flight processing, a secondary wait tick is queued. This is harmless but adds minor polling redundancy.
-4. **Outcome log matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys. This design ensures outcome logs remain decoupled from database write-locking triggers on the audit table.
-5. **Linting and Formatters**: Code checks are performed strictly via the TypeScript compiler (`npx tsc --noEmit`). Project-wide ESLint and Prettier configurations are deferred to Phase 2.
-6. **Claude request timeout**: Request timeout limits on Claude API connections are deferred until a production latency requirement arises.
+3. **Non-Deterministic Task Query Ordering**: When tasks are enqueued synchronously within the same millisecond, the database's `created_at` timestamp matches exactly, which can lead to non-deterministic ordering in listing queries (e.g. `listAll`) since the database does not enforce a secondary sorting key like `id` or `rowid`.
+4. **Double Polling Interval Ticks**: The Orchestrator re-arms its timeout loop after completing a cycle. If a cycle is skipped due to in-flight processing, a secondary wait tick is queued. This is harmless but adds minor polling redundancy.
+5. **Outcome log matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys. This design ensures outcome logs remain decoupled from database write-locking triggers on the audit table.
+6. **Linting and Formatters**: Code checks are performed strictly via the TypeScript compiler (`npx tsc --noEmit`). Project-wide ESLint and Prettier configurations are deferred to Phase 2.
+7. **Claude request timeout**: Request timeout limits on Claude API connections are deferred until a production latency requirement arises.

@@ -55,14 +55,45 @@ A future developer picking up Phase 2 should review these technical design patte
 
 ---
 
+## ⚠️ Known Limitations
+
+1. **Process-Wide Config Cache**: Configurations are cached process-wide inside `config.ts` after the first call. Tests or scripts updating environment variables mid-execution must call `clearConfigCache()` to reload settings.
+2. **Non-Interactive Stdin Limitations**: In background tasks or CI/CD pipelines, stdin cannot block for input. Gated filesystem writes will default to `false` (denied) in these environments.
+3. **Non-Deterministic Task Query Ordering**: When tasks are enqueued synchronously within the same millisecond, the database's `created_at` timestamp matches exactly, which can lead to non-deterministic ordering in listing queries (e.g. `listAll`) since the database does not enforce a secondary sorting key like `id` or `rowid`.
+4. **Claude Request Timeout**: Request timeout limits on Claude API connections are deferred until a production latency requirement arises.
+
+---
+
 ## 🛡️ Architectural Assumptions Verification
 
 For each of the 7 assumptions (A1–A7) from the master charter, here is their alignment in the Phase 1 codebase:
 
-- **A1: Node.js & TypeScript**: **Consistent**. The runtime is written for Node.js using TypeScript module compilation.
-- **A2: TypeScript compiling targeting ES2022 and NodeNext**: **Consistent**. Configured in `tsconfig.json`.
-- **A3: Logging using pino**: **Consistent**. Implemented as the primary structured JSON logger wrapper.
-- **A4: SQLite relational database connection using better-sqlite3**: **Consistent**. SQLite files are managed using `better-sqlite3`.
-- **A5: Configuration management via Dotenv**: **Consistent**. Environment variable loading is managed in `config.ts`.
-- **A6: LLM Routing targeting Anthropic Claude SDK**: **Consistent**. Claude API message completions are integrated.
-- **A7: Vitest test runner**: **Consistent**. The test files are executed via the Vitest runner.
+- **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Partially Consistent**. The TypeScript/Node.js orchestrator and agent runtime match this perfectly. However, the Python AI/ML worker stack has not been implemented or exercised yet, as Phase 1 has no vision, embeddings, or local model serving requirements.
+- **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Untested**. The codebase was developed and tested entirely on Windows. Cross-platform behaviors and compatibility on macOS and Linux have not been verified.
+- **A3 — Cloud model provider: Anthropic Claude API as primary, with a pluggable model-router so other providers (OpenAI, local Ollama) can be swapped in without redesign**: **Consistent**. The primary cloud connector routes via the Anthropic Claude API. The pluggable structure is enforced by the `ModelRouter.register()` design, which decouples model invocation from connector implementations, allowing alternative connectors to be added without modifying the router schema.
+- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged**. A local model runtime using Ollama was not implemented or integrated in Phase 1.
+- **A5 — Interface for Phase 1: CLI + structured logs, NOT voice, NOT computer-control yet**: **Consistent**. Phase 1 implements a TTY-interactive CLI context, background polling daemon orchestration, and structured JSON logs. Voice processing and computer-control functions are entirely absent.
+- **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory, in Phase 1**: **Partially Consistent**. Relational task queue scheduling, heartbeats, and audit transactions are stored in SQLite. The local vector store for semantic memory was deferred to Phase 3.
+- **A7 — You are a developer comfortable running Node/Python locally and reading code**: **Consistent**. The build processes, Vitest verification executions, and manual shell operations conform to local Node.js environment capabilities.
+
+---
+
+## 📊 Final Phase 1 Self-Review Scorecard
+
+| Dimension | Rating | Justification |
+| :--- | :--- | :--- |
+| **Architecture** | **PASS** | Decouples task queues, permission gates, model router adapters, and daemon cycles effectively. |
+| **Code Quality** | **PASS** | Employs strict TypeScript annotations across all components; compiles with zero warnings or errors. |
+| **Security** | **PASS** | Prevents log secrets leaks via recursive sanitization and guarantees audit trails are immutable using SQLite triggers. |
+| **Performance** | **PASS** | Employs WAL logging on file-backed databases and caches configurations to minimize connection latencies. |
+| **Maintainability** | **PASS** | Standardizes command execution and queue transactions inside a bootloader-allocated context runtime. |
+| **Scalability** | **PASS** | Abstract definitions for model routing and task heartbeats can scale to multi-agent IPC structures. |
+| **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
+| **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions. |
+| **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, and transitional developer notes. |
+| **Testing** | **PARTIAL** | While all 64 unit/E2E tests pass, coverage is incomplete. Specifically, `prompt.test.ts` only validates the headless `stdin` fallback branch; the interactive readline terminal input path (`y`/`N` user approval) has zero test coverage. |
+| **Edge Cases** | **PARTIAL** | Although WAL memory pragma limits and TTY fallbacks are handled, the query task ordering under sub-millisecond insertions remains non-deterministic on the database side and is only resolved client-side in testing. |
+| **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, and proper process exit codes. |
+| **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |
+| **Dependency Management** | **PASS** | Integrates only highly audited, lightweight packages (`better-sqlite3`, `pino`, `dotenv`, `@anthropic-ai/sdk`). |
+| **Consistency w/ Project Standards** | **PARTIAL** | While TypeScript, ESM, and Vitest guidelines were met, the master charter requirement for CI pipeline automation was deferred to Phase 2. |
