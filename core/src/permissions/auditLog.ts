@@ -33,7 +33,7 @@ export class AuditLog {
     action: string;
     params?: unknown;
     approvalStatus: 'granted' | 'denied' | 'n-a';
-    approver: 'system' | 'user';
+    approver: 'system' | 'user' | 'policy';
   }): string {
     const correlationId = crypto.randomUUID();
     const now = new Date().toISOString();
