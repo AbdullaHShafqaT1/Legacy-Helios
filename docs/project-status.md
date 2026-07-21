@@ -21,9 +21,10 @@ This living status document captures the completion state of **Jarvis Phase 1**,
 | **1.9** | Pipeline validation: E2E pipeline integration test suite and final status documentation packages. | **COMPLETE** |
 | **2.1** | Task ordering fix (sequence_id column, sorting, migrations) & readline gating timeout + coverage tests. | **COMPLETE** |
 | **2.2** | Gatekeeper Hardening: GuardedAction taxonomy, 2-step PolicyMap authorization, policy auto-approvals, & high-friction prompts. | **COMPLETE** |
+| **2.3** | Filesystem Connector: project-root scoping, path traversal protection, Gatekeeper integration, and audit logging. | **COMPLETE** |
 
 ### Total Project Test Count:
-**73 tests** pass successfully across **14 test files** inside the repository.
+**82 tests** pass successfully across **15 test files** inside the repository.
 
 ---
 
