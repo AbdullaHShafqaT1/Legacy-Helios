@@ -22,9 +22,10 @@ This living status document captures the completion state of **Jarvis Phase 1**,
 | **2.1** | Task ordering fix (sequence_id column, sorting, migrations) & readline gating timeout + coverage tests. | **COMPLETE** |
 | **2.2** | Gatekeeper Hardening: GuardedAction taxonomy, 2-step PolicyMap authorization, policy auto-approvals, & high-friction prompts. | **COMPLETE** |
 | **2.3** | Filesystem Connector: project-root scoping, path traversal protection, Gatekeeper integration, and audit logging. | **COMPLETE** |
+| **2.4** | Git Connector: status/log/diff read operations, gated commit/push, gated force-push/history-rewrite, and error classification. | **COMPLETE** |
 
 ### Total Project Test Count:
-**82 tests** pass successfully across **15 test files** inside the repository.
+**91 tests** pass successfully across **16 test files** inside the repository.
 
 ---
 
@@ -55,6 +56,8 @@ A future developer picking up Phase 2 should review these technical design patte
    No custom timeout controls are set for Claude connection handles. This configuration was deferred until real latency thresholds arise.
 5. **Code Style Linters**:
    Formatting validations are performed using TypeScript compilations (`npx tsc --noEmit`). Project-wide ESLint and Prettier setups are deferred.
+6. **Filesystem Read Gating vs Git Read Unrestricted**:
+   Filesystem Connector read operations (`listDir`, `readFile`) are routed through the Permission Gatekeeper (`file-read`, policy-auto-approved) for consistency with the "deny by default, nothing available without explicit allow-list" security posture. In contrast, Git Connector read operations (`status`, `log`, `diff`) do not invoke the Gatekeeper at all, as Git inspections are non-mutating and unrestricted by design.
 
 ---
 
