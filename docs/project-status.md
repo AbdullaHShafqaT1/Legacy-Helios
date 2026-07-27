@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phase 1)
+# Jarvis OS Project Status (Phase 1 & Phase 2 through 2.4)
 
-This living status document captures the completion state of **Jarvis Phase 1**, outlining deliverables, exclusions, transition guidelines, and locked-in assumptions.
+This living status document captures the completion state of **Jarvis Phase 1 & Phase 2 (through Sub-task 2.4)**, outlining deliverables, exclusions, transition guidelines, and locked-in assumptions.
 
 ---
 
@@ -84,7 +84,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 
 ---
 
-## 📊 Final Phase 1 & 2.1 Self-Review Scorecard
+## 📊 Self-Review Scorecard (Phase 1 & Phase 2 through Sub-task 2.4)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |
@@ -97,7 +97,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
 | **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions. |
 | **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, and transitional developer notes. |
-| **Testing** | **PASS** | The test suite reaches 69 tests. We mock `node:readline/promises` to cover and verify the Gatekeeper interactive prompt's approve, deny, and timeout paths. |
+| **Testing** | **PASS** | The test suite reaches 91 tests across 16 files, covering the core queue, gatekeeper interactive/high-friction prompts, filesystem connector, and git connector with real temporary repositories. |
 | **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via a monotonic `sequence_id` database index, and non-TTY stdin checks handle headless fallbacks. |
 | **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, and proper process exit codes. |
 | **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |
