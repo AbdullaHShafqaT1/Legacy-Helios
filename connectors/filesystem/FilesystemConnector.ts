@@ -142,19 +142,28 @@ export class FilesystemConnector {
     });
 
     if (!authorization.granted) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'denied — not-permitted');
       throw new Error(`Directory read permission denied for actor "${actor}": ${authorization.denialReason || 'denied'}`);
     }
 
     if (!fs.existsSync(resolvedPath)) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'error — directory not found');
       throw new FileNotFoundError(`Directory not found at path "${targetPath}" (resolved: "${resolvedPath}")`);
     }
 
     const stat = fs.statSync(resolvedPath);
     if (!stat.isDirectory()) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'error — not a directory');
       throw new Error(`Target path "${targetPath}" is not a directory.`);
     }
 
     const entries = fs.readdirSync(resolvedPath, { withFileTypes: true });
+    this.auditLog.recordOutcome(
+      authorization.correlationId,
+      actor,
+      'file-read',
+      `success — listed directory ${resolvedPath}`
+    );
     return entries.map((entry) => {
       const entryPath = path.join(resolvedPath, entry.name);
       let size = 0;
@@ -187,19 +196,29 @@ export class FilesystemConnector {
     });
 
     if (!authorization.granted) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'denied — not-permitted');
       throw new Error(`File read permission denied for actor "${actor}": ${authorization.denialReason || 'denied'}`);
     }
 
     if (!fs.existsSync(resolvedPath)) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'error — file not found');
       throw new FileNotFoundError(`File not found at path "${targetPath}" (resolved: "${resolvedPath}")`);
     }
 
     const stat = fs.statSync(resolvedPath);
     if (stat.isDirectory()) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'file-read', 'error — target is a directory');
       throw new Error(`Target path "${targetPath}" is a directory, not a file.`);
     }
 
-    return fs.readFileSync(resolvedPath, 'utf8');
+    const content = fs.readFileSync(resolvedPath, 'utf8');
+    this.auditLog.recordOutcome(
+      authorization.correlationId,
+      actor,
+      'file-read',
+      `success — read file ${resolvedPath}`
+    );
+    return content;
   }
 
   /**

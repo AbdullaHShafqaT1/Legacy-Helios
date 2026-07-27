@@ -1,4 +1,4 @@
-export type TaskType = "coding" | "reasoning";
+export type TaskType = "coding" | "reasoning" | "research";
 
 export interface ModelRequestContext {
   description: string;
