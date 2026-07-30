@@ -105,6 +105,21 @@ export function openDb(dbPath: string): Database.Database {
     BEGIN
       SELECT RAISE(ABORT, 'Audit log entries are immutable and cannot be deleted.');
     END;
+
+    CREATE TABLE IF NOT EXISTS memory_entries (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      embedding_id TEXT NOT NULL,
+      source_agent TEXT NOT NULL,
+      source_task_id TEXT,
+      tag TEXT DEFAULT '',
+      timestamp TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memory_entries_embedding_id ON memory_entries (embedding_id);
+    CREATE INDEX IF NOT EXISTS idx_memory_entries_source_agent ON memory_entries (source_agent);
+    CREATE INDEX IF NOT EXISTS idx_memory_entries_tag ON memory_entries (tag);
+    CREATE INDEX IF NOT EXISTS idx_memory_entries_timestamp ON memory_entries (timestamp);
   `;
 
   // Run migration check if table 'tasks' already exists before executing schemaDdl

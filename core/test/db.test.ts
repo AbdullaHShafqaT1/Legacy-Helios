@@ -90,4 +90,43 @@ describe('Database connection and schema', () => {
     const deleteStmt = db.prepare("DELETE FROM audit_log WHERE correlation_id = 'corr-999'");
     expect(() => deleteStmt.run()).toThrow(/Audit log entries are immutable and cannot be deleted/);
   });
+
+  it('should create memory_entries table with required schema and indexes', () => {
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+    expect(tables.map((t) => t.name)).toContain('memory_entries');
+
+    const columns = db.pragma('table_info(memory_entries)') as { name: string; type: string; notnull: number }[];
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toEqual(
+      expect.arrayContaining(['id', 'content', 'embedding_id', 'source_agent', 'source_task_id', 'tag', 'timestamp'])
+    );
+
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as { name: string }[];
+    const idxNames = indexes.map((i) => i.name);
+    expect(idxNames).toContain('idx_memory_entries_embedding_id');
+    expect(idxNames).toContain('idx_memory_entries_source_agent');
+    expect(idxNames).toContain('idx_memory_entries_tag');
+    expect(idxNames).toContain('idx_memory_entries_timestamp');
+  });
+
+  it('should allow inserting and querying memory_entries rows', () => {
+    const insertStmt = db.prepare(`
+      INSERT INTO memory_entries (id, content, embedding_id, source_agent, source_task_id, tag, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const now = '2026-07-30T12:00:00Z';
+    expect(() =>
+      insertStmt.run('mem-1', 'Sample canonical text content', 'emb-100', 'researcher', 'task-42', 'science', now)
+    ).not.toThrow();
+
+    const row = db.prepare('SELECT * FROM memory_entries WHERE id = ?').get('mem-1') as any;
+    expect(row.id).toBe('mem-1');
+    expect(row.content).toBe('Sample canonical text content');
+    expect(row.embedding_id).toBe('emb-100');
+    expect(row.source_agent).toBe('researcher');
+    expect(row.source_task_id).toBe('task-42');
+    expect(row.tag).toBe('science');
+    expect(row.timestamp).toBe(now);
+  });
 });

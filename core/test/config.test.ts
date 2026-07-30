@@ -17,6 +17,9 @@ describe('Configuration Loader', () => {
     delete process.env.JARVIS_POLL_INTERVAL_MS;
     delete process.env.JARVIS_STALE_TASK_TIMEOUT_MS;
     delete process.env.JARVIS_LOG_LEVEL;
+    delete process.env.JARVIS_VECTOR_STORE_PATH;
+    delete process.env.JARVIS_VECTOR_STORE_TYPE;
+    delete process.env.JARVIS_EMBEDDING_DIMENSIONS;
   });
 
   afterEach(() => {
@@ -49,6 +52,9 @@ describe('Configuration Loader', () => {
     expect(config.pollIntervalMs).toBe(5000);
     expect(config.staleTaskTimeoutMs).toBe(300000);
     expect(config.logLevel).toBe('info');
+    expect(config.vectorStorePath).toBe('memory-store/vectors.db');
+    expect(config.vectorStoreType).toBe('sqlite-vss');
+    expect(config.embeddingDimensions).toBe(384);
   });
 
   it('should parse optional variables correctly when provided', () => {
@@ -68,10 +74,29 @@ describe('Configuration Loader', () => {
     expect(config.pollIntervalMs).toBe(1000);
     expect(config.staleTaskTimeoutMs).toBe(60000);
     expect(config.logLevel).toBe('debug');
+    expect(config.vectorStorePath).toBe('memory-store/vectors.db');
+    expect(config.vectorStoreType).toBe('sqlite-vss');
+    expect(config.embeddingDimensions).toBe(384);
+  });
+
+  it('should parse vector store configuration overrides when provided', () => {
+    process.env.JARVIS_VECTOR_STORE_PATH = 'custom/vectors.db';
+    process.env.JARVIS_VECTOR_STORE_TYPE = 'local-sqlite';
+    process.env.JARVIS_EMBEDDING_DIMENSIONS = '1536';
+
+    const config = loadConfig(false);
+    expect(config.vectorStorePath).toBe('custom/vectors.db');
+    expect(config.vectorStoreType).toBe('local-sqlite');
+    expect(config.embeddingDimensions).toBe(1536);
   });
 
   it('should throw ConfigError if numeric variables are invalid numbers', () => {
     process.env.JARVIS_MAX_RETRIES = 'not-a-number';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
+  });
+
+  it('should throw ConfigError if JARVIS_EMBEDDING_DIMENSIONS is invalid or non-positive', () => {
+    process.env.JARVIS_EMBEDDING_DIMENSIONS = '-10';
     expect(() => loadConfig(false)).toThrow(ConfigError);
   });
 
