@@ -50,13 +50,21 @@ export interface VectorStore {
  * Stores embeddings as serialized JSON float arrays and computes exact cosine similarity.
  *
  * DESIGN DECISION: Local-first SQLite Vector Store (SqliteVectorStore)
- * We select an embedded local SQLite vector store stored by default at memory-store/vectors.db.
- * It provides zero-network, local-first vector persistence without requiring external servers or
- * Python containers (unlike standalone ChromaDB), while ensuring transactional integrity, zero
- * native-build friction across OS targets, and seamless in-memory testing (':memory:').
+ * We select a custom SQLite-backed vector store using JSON-serialized float arrays
+ * and in-process brute-force cosine similarity, NOT the sqlite-vss extension.
+ *
+ * Why chosen over sqlite-vss or Chroma:
+ * 1. Zero native-extension load friction across platforms (relevant given cross-platform
+ *    verification is still deferred to Phase 5).
+ * 2. No external server process (unlike standalone ChromaDB).
+ * 3. Trivial in-memory testing (':memory:') under Vitest.
+ *
+ * Trade-offs:
+ * - Linear-scan query cost: Computes cosine similarity in memory over all stored records.
+ *   This brute-force approach will need to be revisited or optimized if embedding counts grow large.
  */
 export class SqliteVectorStore implements VectorStore {
-  readonly type = 'sqlite-vss';
+  readonly type = 'sqlite-json-cosine';
   private dbPath: string;
   private db: Database.Database | null = null;
   private logger?: Logger;

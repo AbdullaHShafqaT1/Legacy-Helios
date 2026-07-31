@@ -21,7 +21,7 @@ describe('SqliteVectorStore', () => {
   });
 
   it('should initialize successfully with an in-memory SQLite database', () => {
-    expect(store.type).toBe('sqlite-vss');
+    expect(store.type).toBe('sqlite-json-cosine');
     expect(store.count()).toBe(0);
   });
 

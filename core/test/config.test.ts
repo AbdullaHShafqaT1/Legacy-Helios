@@ -53,7 +53,7 @@ describe('Configuration Loader', () => {
     expect(config.staleTaskTimeoutMs).toBe(300000);
     expect(config.logLevel).toBe('info');
     expect(config.vectorStorePath).toBe('memory-store/vectors.db');
-    expect(config.vectorStoreType).toBe('sqlite-vss');
+    expect(config.vectorStoreType).toBe('sqlite-json-cosine');
     expect(config.embeddingDimensions).toBe(384);
   });
 
@@ -75,7 +75,7 @@ describe('Configuration Loader', () => {
     expect(config.staleTaskTimeoutMs).toBe(60000);
     expect(config.logLevel).toBe('debug');
     expect(config.vectorStorePath).toBe('memory-store/vectors.db');
-    expect(config.vectorStoreType).toBe('sqlite-vss');
+    expect(config.vectorStoreType).toBe('sqlite-json-cosine');
     expect(config.embeddingDimensions).toBe(384);
   });
 
