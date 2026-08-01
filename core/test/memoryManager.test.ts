@@ -239,4 +239,51 @@ describe('MemoryManager', () => {
     expect(countRow.cnt).toBe(0);
     expect(vectorStore.count()).toBe(0);
   });
+
+  it('should log redaction-triggered rejections in the Audit Log', async () => {
+    await expect(
+      manager.store({
+        content: 'sensitive openai key sk-proj-abcdef1234567890abcdef1234567890',
+        sourceAgent: 'software-engineer',
+        tag: 'secrets-test',
+        sourceTaskId: 'task-redact-log',
+      })
+    ).rejects.toThrow(RedactionValidationError);
+
+    // Retrieve the newly added logs (one decision, one outcome)
+    const logs = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 2').all() as any[];
+    expect(logs.length).toBe(2);
+
+    const outcomeLog = logs[0];
+    const decisionLog = logs[1];
+
+    expect(decisionLog.event_type).toBe('decision');
+    expect(decisionLog.action).toBe('memory-write');
+    expect(decisionLog.approval_status).toBe('denied');
+    expect(decisionLog.approver).toBe('system');
+    expect(decisionLog.params_json).toContain('[REDACTED - SENSITIVE CONTENT]');
+    expect(decisionLog.params_json).not.toContain('sk-proj-');
+
+    expect(outcomeLog.event_type).toBe('outcome');
+    expect(outcomeLog.action).toBe('memory-write');
+    expect(outcomeLog.outcome).toContain('Rejected due to detected secret pattern: Claude/OpenAI API key');
+  });
+
+  it('should handle reverse partial-write failures where vector store write fails first', async () => {
+    // Mock vectorStore.store to fail
+    vi.spyOn(vectorStore, 'store').mockImplementation(() => {
+      throw new Error('Simulated Vector Store storage failure');
+    });
+
+    await expect(
+      manager.store({
+        content: 'This memory write should fail during vector store phase',
+        sourceAgent: 'software-engineer',
+      })
+    ).rejects.toThrow(/Simulated Vector Store storage failure/);
+
+    // Verify no memory_entries row was created
+    const countRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_entries').get() as { cnt: number };
+    expect(countRow.cnt).toBe(0);
+  });
 });

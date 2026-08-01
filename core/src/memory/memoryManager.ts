@@ -89,26 +89,27 @@ export class MemoryManager {
 
   /**
    * Evaluates text content against regex patterns to catch obvious credentials.
-   * Rejects store operations immediately if a secret pattern triggers.
+   * Returns the matched pattern category name, or null if clean.
    */
-  private checkRedaction(content: string): void {
+  private checkRedaction(content: string): string | null {
     const AWS_KEY_PATTERN = /AKIA[0-9A-Z]{16}/;
     const CLAUDE_OPENAI_KEY_PATTERN = /sk-(?:ant-|proj-)?[a-zA-Z0-9]{20,}/;
     const GENERIC_TOKEN_HEX_PATTERN = /\b[a-fA-F0-9]{32,64}\b/;
     const GENERIC_TOKEN_BASE64_PATTERN = /\b[A-Za-z0-9+/]{40,}={0,2}\b/;
 
     if (AWS_KEY_PATTERN.test(content)) {
-      throw new RedactionValidationError('AWS Access Key ID detected in content; write rejected.');
+      return 'AWS Access Key ID';
     }
     if (CLAUDE_OPENAI_KEY_PATTERN.test(content)) {
-      throw new RedactionValidationError('Claude/OpenAI API key detected in content; write rejected.');
+      return 'Claude/OpenAI API key';
     }
     if (GENERIC_TOKEN_HEX_PATTERN.test(content)) {
-      throw new RedactionValidationError('Potential generic API token/hex secret detected in content; write rejected.');
+      return 'Potential generic API token/hex secret';
     }
     if (GENERIC_TOKEN_BASE64_PATTERN.test(content)) {
-      throw new RedactionValidationError('Potential generic API token/base64 secret detected in content; write rejected.');
+      return 'Potential generic API token/base64 secret';
     }
+    return null;
   }
 
   /**
@@ -120,7 +121,29 @@ export class MemoryManager {
     const { content, sourceAgent, sourceTaskId = null, tag = '' } = input;
 
     // 1. Redaction check (runs BEFORE embedding/storing)
-    this.checkRedaction(content);
+    const matchedCategory = this.checkRedaction(content);
+    if (matchedCategory) {
+      const correlationId = this.auditLog.recordDecision({
+        actor: sourceAgent,
+        action: 'memory-write',
+        params: {
+          tag,
+          sourceTaskId,
+          content: '[REDACTED - SENSITIVE CONTENT]'
+        },
+        approvalStatus: 'denied',
+        approver: 'system',
+      });
+
+      this.auditLog.recordOutcome(
+        correlationId,
+        sourceAgent,
+        'memory-write',
+        `Rejected due to detected secret pattern: ${matchedCategory}`
+      );
+
+      throw new RedactionValidationError(`${matchedCategory} detected in content; write rejected.`);
+    }
 
     // 2. Permission Gatekeeper integration
     const permissionRequest = {
@@ -207,7 +230,7 @@ export class MemoryManager {
     // Fetch oldest entries to evict
     const oldestEntries = this.db.prepare(`
       SELECT id, embedding_id FROM memory_entries
-      ORDER BY timestamp ASC, id ASC
+      ORDER BY timestamp ASC, rowid ASC
       LIMIT ?
     `).all(excessCount) as { id: string; embedding_id: string }[];
 
