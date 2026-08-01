@@ -20,6 +20,7 @@ describe('Configuration Loader', () => {
     delete process.env.JARVIS_VECTOR_STORE_PATH;
     delete process.env.JARVIS_VECTOR_STORE_TYPE;
     delete process.env.JARVIS_EMBEDDING_DIMENSIONS;
+    delete process.env.JARVIS_MEMORY_MAX_ENTRIES;
   });
 
   afterEach(() => {
@@ -55,6 +56,7 @@ describe('Configuration Loader', () => {
     expect(config.vectorStorePath).toBe('memory-store/vectors.db');
     expect(config.vectorStoreType).toBe('sqlite-json-cosine');
     expect(config.embeddingDimensions).toBe(384);
+    expect(config.memoryMaxEntries).toBe(1000);
   });
 
   it('should parse optional variables correctly when provided', () => {
@@ -90,6 +92,12 @@ describe('Configuration Loader', () => {
     expect(config.embeddingDimensions).toBe(1536);
   });
 
+  it('should parse memory retention limits when provided', () => {
+    process.env.JARVIS_MEMORY_MAX_ENTRIES = '500';
+    const config = loadConfig(false);
+    expect(config.memoryMaxEntries).toBe(500);
+  });
+
   it('should throw ConfigError if numeric variables are invalid numbers', () => {
     process.env.JARVIS_MAX_RETRIES = 'not-a-number';
     expect(() => loadConfig(false)).toThrow(ConfigError);
@@ -97,6 +105,14 @@ describe('Configuration Loader', () => {
 
   it('should throw ConfigError if JARVIS_EMBEDDING_DIMENSIONS is invalid or non-positive', () => {
     process.env.JARVIS_EMBEDDING_DIMENSIONS = '-10';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
+  });
+
+  it('should throw ConfigError if JARVIS_MEMORY_MAX_ENTRIES is invalid or non-positive', () => {
+    process.env.JARVIS_MEMORY_MAX_ENTRIES = 'not-a-number';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
+    clearConfigCache();
+    process.env.JARVIS_MEMORY_MAX_ENTRIES = '-5';
     expect(() => loadConfig(false)).toThrow(ConfigError);
   });
 
