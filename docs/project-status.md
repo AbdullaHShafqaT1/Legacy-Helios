@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phase 1 & Phase 2 Complete)
+# Jarvis OS Project Status (Phases 1, 2 & 3 Complete)
 
-This living status document captures the completion state of **Jarvis Phase 1 & Phase 2 (through Sub-task 2.6)**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phase 1, Phase 2 & Phase 3 (through Sub-task 3.4)**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -25,9 +25,13 @@ This living status document captures the completion state of **Jarvis Phase 1 & 
 | **2.4** | Git Connector: status/log/diff read operations, gated commit/push, gated force-push/history-rewrite, and error classification. | **COMPLETE** |
 | **2.5** | Researcher Agent: read-only filesystem policy, structured research output (`summary`, `citations`, `confidence`, `caveats`), and cross-agent integration test suite. | **COMPLETE** |
 | **2.6** | CI Pipeline & Documentation: GitHub Actions CI workflow (`ci.yml`), README configuration & policy documentation, and final Phase 2 status rollup. | **COMPLETE** |
+| **3.1** | Vector Store and Embedding pipeline foundation: custom SQLite-backed vector store (type 'sqlite-json-cosine'), n-gram local provider, pipeline, database schema, config variables, and ADR inline rationale. | **COMPLETE** |
+| **3.2** | Memory Manager Core: store/query/getById methods, regex secrets redaction with audit logging, FIFO eviction policy tiebroken by rowid, and database-vector rollback write-consistency. | **COMPLETE** |
+| **3.3** | Agent Memory Integration: wired Software Engineer and Researcher agents for context recall on query and completion writing on success, with shared-by-project bidirectional recall. | **COMPLETE** |
+| **3.4** | Cross-Session Restart Proof & Documentation: wrote tests validating persistence of memory across DB/VectorStore close and reopen cycles (direct and agent-mediated), updated README and project status, and final ADR 0002. | **COMPLETE** |
 
 ### Total Project Test Count:
-**96 tests** pass successfully across **17 test files** inside the repository.
+**131 tests** pass successfully across **22 test files** inside the repository.
 
 ---
 
@@ -37,7 +41,7 @@ Consistent with the original master Phase 1 & Phase 2 charter specifications, th
 - **No Voice Interface**: No speech recognition or speech synthesis.
 - **No Browser Automation / Ad-Hoc Web Scraping**: No Chromium, Playwright, Puppeteer, or unmanaged HTTP scraping connectors (deferred to Phase 5).
 - **No Additional Agent Personas**: Only the `software-engineer` and `researcher` agents are present; review and QA agents are excluded.
-- **No Vector Memory**: No ChromaDB, Pinecone, FAISS, or multi-tiered transient memory routing (deferred to Phase 3+).
+- **No External/Dynamic Vector Databases**: ChromaDB, Pinecone, or Milvus are excluded; memory relies strictly on a local-first SQLite file vector database (type `'sqlite-json-cosine'`).
 - **No Multi-Agent Swarm Communications**: Events and schedules run strictly in-process; Redis/NATS brokers are excluded.
 - **No Electron/GUI**: Operation is restricted strictly to terminal TTY command lines.
 - **No Cloud VMs / Linux Cross-Platform Verification**: Host machines run scripts directly on Windows; cross-platform CI matrix testing is deferred to Phase 5.
@@ -64,6 +68,10 @@ A future developer picking up work after Phase 2 should review these technical d
    Sub-task 2.5's Part B Item 4 (destructive git operation confirmation test in `core/test/phase2-integration.test.ts`) validates the `PermissionGatekeeper` and `GitConnector` high-friction confirmation behavior directly rather than through a full Agent → Connector path. This is because no existing agent currently exposes a force-push or history-rewrite action; this is an explicit scope boundary, not a defect.
 8. **Filesystem Read-Outcome Audit Logging Correction (2.5 Note)**:
    In Sub-task 2.5, `FilesystemConnector.ts` was updated so that `readFile` and `listDir` record post-execution audit `[OUTCOME]` rows alongside pre-execution `[DECISION]` rows. This was a necessary correction to a Sub-task 2.3 gap (where reads recorded decisions but omitted outcome logs), not an original 2.3 deviation.
+9. **Vector Store Hashing & Linear-Scan (Phase 3 Note)**:
+   The embedding provider hashes character n-grams to form vector indexes. Retrieval executes via dynamic brute-force cosine similarity checks in JS/TS. While this eliminates build and platform-specific compilation hurdles, query costs grow linearly with the volume of memories (unmitigated by index trees).
+10. **Redaction Check Rejections (Phase 3 Note)**:
+    Secrets match triggers validate AWS/API key regexes. Attempted writes of secret text are rejected immediately and audit logged with status 'denied' and redact-rejection explanations, bypassing gatekeeper prompts entirely.
 
 ---
 
@@ -91,6 +99,8 @@ The table below provides the authoritative final resolution status for all 7 car
 | **5. Claude API connection timeout** | **STILL DEFERRED (Phase 6)** | Custom socket/request timeout limits on Anthropic Claude API connections deferred to Phase 6 production hardening. |
 | **6. Local model runtime (Ollama)** | **STILL DEFERRED (Phase 3+)** | Local LLM serving via Ollama deferred to Phase 3+ when offline model execution is prioritized. |
 | **7. Cross-platform verification (Linux/macOS)** | **STILL DEFERRED (Phase 5)** | Developed and tested on Windows; multi-OS CI matrix and cross-platform behavior testing deferred to Phase 5. |
+| **8. Linear-scan search complexity at scale** | **DEFERRED (Phase 4+)** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
+| **9. Secrets pattern matching regex gaps** | **DEFERRED (Phase 4+)** | Redaction scanner relies on basic regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
 
 ---
 
@@ -119,10 +129,10 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Maintainability** | **PASS** | Standardizes command execution and queue transactions inside a bootloader-allocated context runtime. |
 | **Scalability** | **PASS** | Abstract definitions for model routing and task heartbeats can scale to multi-agent IPC structures. |
 | **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
-| **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions. |
-| **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, carry-forward resolutions, and transitional developer notes. |
-| **Testing** | **PASS** | The test suite reaches **96 tests across 17 files**, covering the core queue, gatekeeper interactive/high-friction prompts, filesystem connector, git connector, researcher agent, and cross-agent deterministic task ordering. |
-| **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via monotonic `sequence_id`, and non-TTY stdin checks handle headless fallbacks. |
+| **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions, correcting early vector store labels to `'sqlite-json-cosine'`. |
+| **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, carry-forward resolutions, transitional developer notes, and dynamic agent memory examples. |
+| **Testing** | **PASS** | The test suite reaches **131 tests across 22 files**, covering the core queue, gatekeepers, filesystem, git, memory manager rollbacks, cross-agent integration, and file-restart persistence. |
+| **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via monotonic `sequence_id`, same-millisecond FIFO evictions are rowid-tiebroken, and cross-session restarts are verified. |
 | **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, proper process exit codes, and automated CI pipelines. |
 | **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |
 | **Dependency Management** | **PASS** | Integrates only highly audited, lightweight packages (`better-sqlite3`, `pino`, `dotenv`, `@anthropic-ai/sdk`). |

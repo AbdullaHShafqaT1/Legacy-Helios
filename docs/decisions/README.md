@@ -14,5 +14,6 @@ This directory documents the technical decisions, design trade-offs, and archite
 | ID | Title | Status | Date | Summary |
 |---|---|---|---|---|
 | 0001 | Initial Repository Structure | Accepted | 2026-07-10 | Settled on monorepo design separating apps, services, agents, tools, prompts, memory, and connectors. |
+| 0002 | SQLite JSON Cosine Vector Store | Accepted | 2026-08-03 | Selected custom SQLite-backed vector store with JSON float arrays and brute-force cosine similarity. |
 
 *To create a new decision record, copy the standard template `0000-template.md` and increment the ID.*
