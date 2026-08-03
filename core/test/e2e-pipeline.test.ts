@@ -12,6 +12,10 @@ import { AgentRouter } from '../src/router/agentRouter.js';
 import { SoftwareEngineerAgent } from '../../agents/software-engineer/SoftwareEngineerAgent.js';
 import { JarvisEventBus } from '../src/events/bus.js';
 import { Orchestrator } from '../src/orchestrator.js';
+import { SqliteVectorStore } from '../src/memory/vectorStore.js';
+import { LocalEmbeddingProvider } from '../src/memory/embeddingProvider.js';
+import { EmbeddingPipeline } from '../src/memory/embeddingPipeline.js';
+import { MemoryManager } from '../src/memory/memoryManager.js';
 import { createLogger } from '../src/lib/logger.js';
 import { clearConfigCache } from '../src/lib/config.js';
 
@@ -70,9 +74,36 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
     });
     modelRouter.register(connector);
 
+    const vs = new SqliteVectorStore(':memory:');
+    const prov = new LocalEmbeddingProvider(384);
+    const pipe = new EmbeddingPipeline(vs, prov);
+    const memoryManager = new MemoryManager(
+      db,
+      vs,
+      pipe,
+      prov,
+      gatekeeper,
+      auditLog,
+      logger,
+      {
+        dbPath: ':memory:',
+        model: 'claude-sonnet-4-6',
+        maxRetries: 3,
+        pollIntervalMs: 5000,
+        staleTaskTimeoutMs: 300000,
+        logLevel: 'silent',
+        approvalTimeoutMs: 30000,
+        projectRoot: tempDir,
+        vectorStorePath: ':memory:',
+        vectorStoreType: 'sqlite-json-cosine',
+        embeddingDimensions: 384,
+        memoryMaxEntries: 1000,
+      }
+    );
+
     // Setup Agent Router & Software Engineer Agent
     agentRouter = new AgentRouter();
-    const softwareEngineer = new SoftwareEngineerAgent(modelRouter, gatekeeper, auditLog, logger);
+    const softwareEngineer = new SoftwareEngineerAgent(modelRouter, gatekeeper, auditLog, memoryManager, logger);
     agentRouter.register(softwareEngineer, { isDefault: true });
 
     // Setup Event Bus

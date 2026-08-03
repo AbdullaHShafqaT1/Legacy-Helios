@@ -14,6 +14,10 @@ import { GitConnector } from '../../connectors/git/GitConnector.js';
 import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
 import { SoftwareEngineerAgent } from '../../agents/software-engineer/SoftwareEngineerAgent.js';
 import { toAgentInput } from '../../agents/shared/Agent.js';
+import { SqliteVectorStore } from '../src/memory/vectorStore.js';
+import { LocalEmbeddingProvider } from '../src/memory/embeddingProvider.js';
+import { EmbeddingPipeline } from '../src/memory/embeddingPipeline.js';
+import { MemoryManager } from '../src/memory/memoryManager.js';
 
 describe('Phase 2 Cross-Agent & Researcher Integration Suite', () => {
   let tempDir: string;
@@ -91,8 +95,35 @@ describe('Phase 2 Cross-Agent & Researcher Integration Suite', () => {
     modelRouter.register(researchRoute);
     modelRouter.register(codingRoute);
 
-    researcherAgent = new ResearcherAgent(modelRouter, filesystemConnector, logger);
-    softwareEngineerAgent = new SoftwareEngineerAgent(modelRouter, gatekeeper, auditLog, logger);
+    const vs = new SqliteVectorStore(':memory:');
+    const prov = new LocalEmbeddingProvider(384);
+    const pipe = new EmbeddingPipeline(vs, prov);
+    const memoryManager = new MemoryManager(
+      db,
+      vs,
+      pipe,
+      prov,
+      gatekeeper,
+      auditLog,
+      logger,
+      {
+        dbPath: ':memory:',
+        model: 'claude-sonnet-4-6',
+        maxRetries: 3,
+        pollIntervalMs: 5000,
+        staleTaskTimeoutMs: 300000,
+        logLevel: 'silent',
+        approvalTimeoutMs: 30000,
+        projectRoot: tempDir,
+        vectorStorePath: ':memory:',
+        vectorStoreType: 'sqlite-json-cosine',
+        embeddingDimensions: 384,
+        memoryMaxEntries: 1000,
+      }
+    );
+
+    researcherAgent = new ResearcherAgent(modelRouter, filesystemConnector, memoryManager, logger);
+    softwareEngineerAgent = new SoftwareEngineerAgent(modelRouter, gatekeeper, auditLog, memoryManager, logger);
   });
 
   afterEach(() => {

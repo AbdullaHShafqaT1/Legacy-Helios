@@ -32,3 +32,32 @@ export function toAgentInput(task: TaskRow): AgentTaskInput {
     fileContext: task.file_context ? JSON.parse(task.file_context) : undefined,
   };
 }
+
+/**
+ * Derives a project/context tag from the task input.
+ * First checks fileContext properties, then parses description for tags/brackets, and defaults to 'general'.
+ */
+export function deriveProjectTag(input: AgentTaskInput): string {
+  const fileContext = input.fileContext as Record<string, any> | undefined;
+  if (fileContext && typeof fileContext === 'object') {
+    if (typeof fileContext.tag === 'string' && fileContext.tag.trim().length > 0) {
+      return fileContext.tag.trim();
+    }
+    if (typeof fileContext.project === 'string' && fileContext.project.trim().length > 0) {
+      return fileContext.project.trim();
+    }
+  }
+
+  // Check brackets prefix like [project: foo] or [project-foo]
+  const matchBrackets = input.description.match(/\[project:\s*([a-zA-Z0-9_-]+)\]/i);
+  if (matchBrackets && matchBrackets[1]) {
+    return matchBrackets[1].trim();
+  }
+
+  const matchHash = input.description.match(/#([a-zA-Z0-9_-]+)/);
+  if (matchHash && matchHash[1]) {
+    return matchHash[1].trim();
+  }
+
+  return 'general';
+}

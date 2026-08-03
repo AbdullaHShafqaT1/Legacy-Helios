@@ -11,6 +11,10 @@ import { ClaudeConnector } from '../../connectors/claude-api/ClaudeConnector.js'
 import { AgentRouter } from './router/agentRouter.js';
 import { SoftwareEngineerAgent } from '../../agents/software-engineer/SoftwareEngineerAgent.js';
 import { JarvisEventBus } from './events/bus.js';
+import { SqliteVectorStore } from './memory/vectorStore.js';
+import { LocalEmbeddingProvider } from './memory/embeddingProvider.js';
+import { EmbeddingPipeline } from './memory/embeddingPipeline.js';
+import { MemoryManager } from './memory/memoryManager.js';
 
 export interface CliContext {
   config: Config;
@@ -25,6 +29,7 @@ export interface JarvisContext extends CliContext {
   modelRouter: ModelRouter;
   agentRouter: AgentRouter;
   eventBus: JarvisEventBus;
+  memoryManager: MemoryManager;
 }
 
 /**
@@ -80,11 +85,26 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
   });
   modelRouter.register(claudeConnector);
 
+  const vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));
+  const embeddingProvider = new LocalEmbeddingProvider(config.embeddingDimensions);
+  const embeddingPipeline = new EmbeddingPipeline(vectorStore, embeddingProvider, createLogger('embedding-pipeline', config.logLevel));
+  const memoryManager = new MemoryManager(
+    db,
+    vectorStore,
+    embeddingPipeline,
+    embeddingProvider,
+    gatekeeper,
+    auditLog,
+    createLogger('memory-manager', config.logLevel),
+    config
+  );
+
   const agentRouter = new AgentRouter();
   const softwareEngineer = new SoftwareEngineerAgent(
     modelRouter,
     gatekeeper,
     auditLog,
+    memoryManager,
     createLogger('agent:software-engineer', config.logLevel)
   );
   agentRouter.register(softwareEngineer, { isDefault: true });
@@ -101,5 +121,6 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     modelRouter,
     agentRouter,
     eventBus,
+    memoryManager,
   };
 }

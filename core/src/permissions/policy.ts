@@ -41,7 +41,7 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
     autoApproveActions: ['file-read', 'memory-read'],
   },
   'researcher': {
-    allowedActions: ['file-read', 'memory-read'],
+    allowedActions: ['file-read', 'memory-read', 'memory-write'],
     autoApproveActions: ['file-read', 'memory-read'],
   },
 };

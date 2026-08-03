@@ -32,10 +32,17 @@ describe('SoftwareEngineerAgent', () => {
       recent: vi.fn()
     };
 
+    const mockMemoryManager = {
+      store: vi.fn().mockResolvedValue('mock-memory-id'),
+      query: vi.fn().mockResolvedValue([]),
+      getById: vi.fn().mockResolvedValue(null)
+    };
+
     agent = new SoftwareEngineerAgent(
       mockModelRouter as any,
       mockGatekeeper as any,
       mockAuditLog as any,
+      mockMemoryManager as any,
       logger
     );
   });

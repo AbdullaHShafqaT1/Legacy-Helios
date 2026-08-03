@@ -1,8 +1,9 @@
 import { Logger } from 'pino';
-import { Agent, AgentTaskInput, AgentResult } from '../shared/Agent.js';
+import { Agent, AgentTaskInput, AgentResult, deriveProjectTag } from '../shared/Agent.js';
 import { ModelRouter } from '../../core/src/router/modelRouter.js';
 import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConnector.js';
 import { redactSecrets } from '../../core/src/lib/redact.js';
+import { MemoryManager } from '../../core/src/memory/memoryManager.js';
 
 export interface ResearchAgentResult extends AgentResult {
   summary?: string;
@@ -15,15 +16,18 @@ export class ResearcherAgent implements Agent {
   readonly name = 'researcher';
   private readonly modelRouter: ModelRouter;
   private readonly filesystemConnector?: FilesystemConnector;
+  private readonly memoryManager: MemoryManager;
   private readonly logger: Logger;
 
   constructor(
     modelRouter: ModelRouter,
     filesystemConnector: FilesystemConnector | undefined,
+    memoryManager: MemoryManager,
     logger: Logger
   ) {
     this.modelRouter = modelRouter;
     this.filesystemConnector = filesystemConnector;
+    this.memoryManager = memoryManager;
     this.logger = logger;
   }
 
@@ -36,6 +40,7 @@ export class ResearcherAgent implements Agent {
    * @returns Resolves to a ResearchAgentResult with structured summary, citations, and confidence.
    */
   async process(input: AgentTaskInput): Promise<ResearchAgentResult> {
+    const tag = deriveProjectTag(input);
     const fileContext = input.fileContext as Record<string, any> | undefined;
     const pathsToRead: string[] = [];
 
@@ -98,7 +103,22 @@ export class ResearcherAgent implements Agent {
       }
     }
 
-    const enrichedDescription =
+    // 1. Recall prior context/memories using the project tag
+    let recalledContext = '';
+    try {
+      const memories = await this.memoryManager.query(input.description, { tag, limit: 5 }, this.name);
+      if (memories && memories.length > 0) {
+        recalledContext = '\n\n[RECALLED PRIOR CONTEXT/MEMORIES]:\n' +
+          memories.map((m, idx) => `Memory ${idx + 1} (${m.sourceAgent} @ ${m.timestamp}): ${m.content}`).join('\n');
+      }
+    } catch (error: any) {
+      this.logger.warn(
+        { err: error?.message || String(error), tag },
+        'MemoryManager failed to recall context. Proceeding normally.'
+      );
+    }
+
+    let enrichedDescription =
       Object.keys(fileContents).length > 0
         ? `${input.description}\n\nContext from files:\n` +
           Object.entries(fileContents)
@@ -106,13 +126,17 @@ export class ResearcherAgent implements Agent {
             .join('\n\n')
         : input.description;
 
-    // 1. Route task to model router ('research'). Exceptions bypass catch and propagate out.
+    if (recalledContext) {
+      enrichedDescription += recalledContext;
+    }
+
+    // 2. Route task to model router ('research'). Exceptions bypass catch and propagate out.
     const modelResponse = await this.modelRouter.route('research', {
       description: enrichedDescription,
       fileContext: input.fileContext,
     });
 
-    // 2. Format structured research result
+    // 3. Format structured research result
     let summary = modelResponse.text;
     let confidence = 'high';
     const caveats: string[] = [...readErrors];
@@ -142,7 +166,7 @@ export class ResearcherAgent implements Agent {
       // If response text is not JSON, use raw text as summary/explanation
     }
 
-    return {
+    const finalResult: ResearchAgentResult = {
       status: 'completed',
       filesChanged: [], // ResearcherAgent is read-only; never mutates files
       explanation: summary,
@@ -151,5 +175,23 @@ export class ResearcherAgent implements Agent {
       confidence,
       caveats,
     };
+
+    // Store task completion memory
+    const memoryContent = `Research finding for: ${input.description}. Summary: ${summary}`;
+    try {
+      await this.memoryManager.store({
+        content: memoryContent,
+        sourceAgent: this.name,
+        sourceTaskId: input.taskId,
+        tag,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        { err: err?.message || String(err), taskId: input.taskId },
+        'MemoryManager failed to store completion memory. Task outcome unaffected.'
+      );
+    }
+
+    return finalResult;
   }
 }
