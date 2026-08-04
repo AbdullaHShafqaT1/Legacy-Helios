@@ -35,7 +35,7 @@ This living status document captures the completion state of **Jarvis Phase 1, P
 
 ---
 
-## 🚫 Scope Exclusions (What Phase 1 & Phase 2 DO NOT Include)
+## 🚫 Scope Exclusions (What Phases 1, 2 & 3 DO NOT Include)
 
 Consistent with the original master Phase 1 & Phase 2 charter specifications, the following architectural elements are excluded:
 - **No Voice Interface**: No speech recognition or speech synthesis.
@@ -48,7 +48,7 @@ Consistent with the original master Phase 1 & Phase 2 charter specifications, th
 
 ---
 
-## 🔮 Phase 2 Transition Notes
+## 🔮 Transition Notes (Phases 1-3)
 
 A future developer picking up work after Phase 2 should review these technical design patterns locked in during Phase 1 and Phase 2:
 
@@ -86,7 +86,7 @@ A future developer picking up work after Phase 2 should review these technical d
 
 ---
 
-## 🏁 Phase 1 → Phase 2 Carry-Forward Item Resolution
+## 🏁 Carry-Forward Item Resolution (Through Phase 3)
 
 The table below provides the authoritative final resolution status for all 7 carry-forward items and deferred technical debts from the master charter:
 
@@ -111,14 +111,14 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 - **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Partially Consistent**. The TypeScript/Node.js orchestrator and agent runtime match this perfectly. However, the Python AI/ML worker stack has not been implemented or exercised yet, as Phase 1 & Phase 2 have no vision, embeddings, or local model serving requirements.
 - **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Untested (Windows-only)**. The codebase was developed and tested entirely on Windows. Cross-platform behaviors and compatibility on macOS and Linux are deferred to Phase 5.
 - **A3 — Cloud model provider: Anthropic Claude API as primary, with a pluggable model-router so other providers (OpenAI, local Ollama) can be swapped in without redesign**: **Consistent**. The primary cloud connector routes via the Anthropic Claude API. The pluggable structure is enforced by `ModelRouter.register()`, which decouples model invocation from connector implementations, allowing alternative connectors to be added without modifying the router schema.
-- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred to Phase 3+)**. A local model runtime using Ollama was not implemented or integrated in Phase 2.
+- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred to Phase 4+)**. A local model runtime using Ollama was not implemented or integrated in Phase 3.
 - **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Consistent**. Phase 2 implements a TTY-interactive CLI context, background polling daemon orchestration, and structured JSON logs. Voice processing and computer-control functions are entirely absent.
-- **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory**: **Partially Consistent**. Relational task queue scheduling, heartbeats, and audit transactions are stored in SQLite. The local vector store for semantic memory was deferred to Phase 3+.
+- **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory**: **Consistent**. Relational task queue scheduling, heartbeats, and audit transactions are stored in SQLite. Phase 3 successfully delivered a local-first custom SQLite vector store (`sqlite-json-cosine`) linked to the main DB.
 - **A7 — You are a developer comfortable running Node/Python locally and reading code**: **Consistent**. The build processes, Vitest verification executions, and GitHub Actions CI workflow conform to local Node.js environment capabilities.
 
 ---
 
-## 📊 Self-Review Scorecard (Phase 1 & Phase 2 Complete)
+## 📊 Self-Review Scorecard (Phases 1, 2 & 3 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |
