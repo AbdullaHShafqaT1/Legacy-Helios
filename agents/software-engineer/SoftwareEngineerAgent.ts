@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Logger } from 'pino';
-import { Agent, AgentTaskInput, AgentResult, deriveProjectTag } from '../shared/Agent.js';
+import { Agent, AgentTaskInput, AgentResult, AgentMessage, deriveProjectTag } from '../shared/Agent.js';
 import { ModelRouter } from '../../core/src/router/modelRouter.js';
 import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
 import { MemoryManager } from '../../core/src/memory/memoryManager.js';
+import { MessageRouter } from '../../core/src/router/messageRouter.js';
+import crypto from 'node:crypto';
 
 export class SoftwareEngineerAgent implements Agent {
   readonly name = 'software-engineer';
@@ -14,19 +16,22 @@ export class SoftwareEngineerAgent implements Agent {
   private auditLog: AuditLog;
   private memoryManager: MemoryManager;
   private logger: Logger;
+  private messageRouter?: MessageRouter;
 
   constructor(
     modelRouter: ModelRouter,
     gatekeeper: PermissionGatekeeper,
     auditLog: AuditLog,
     memoryManager: MemoryManager,
-    logger: Logger
+    logger: Logger,
+    messageRouter?: MessageRouter
   ) {
     this.modelRouter = modelRouter;
     this.gatekeeper = gatekeeper;
     this.auditLog = auditLog;
     this.memoryManager = memoryManager;
     this.logger = logger;
+    this.messageRouter = messageRouter;
   }
 
   /**
@@ -149,6 +154,35 @@ export class SoftwareEngineerAgent implements Agent {
         `success — wrote ${modelResponse.text.length} bytes to ${resolvedPath}`
       );
 
+      // Perform code review if messageRouter is registered
+      if (this.messageRouter) {
+        const reviewMsg = {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: 'code-reviewer',
+          type: 'review-request',
+          payload: {
+            taskId: input.taskId,
+            description: input.description,
+            filesChanged: [resolvedPath],
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        try {
+          const reply = await this.messageRouter.sendAndReceive(reviewMsg);
+          if (reply.payload.verdict === 'request-changes') {
+            return {
+              status: 'failed',
+              filesChanged: [resolvedPath],
+              explanation: `Review rejected: ${reply.payload.explanation || 'Changes requested.'}`,
+            };
+          }
+        } catch (err: any) {
+          this.logger.error({ err }, 'Code review timed out or failed.');
+        }
+      }
+
       const successResult: AgentResult = {
         status: 'completed',
         filesChanged: [resolvedPath],
@@ -191,4 +225,75 @@ export class SoftwareEngineerAgent implements Agent {
       };
     }
   }
+
+  /**
+   * Listens for incoming messages (e.g. delegated write-file requests).
+   */
+  async receiveMessage(message: AgentMessage): Promise<AgentMessage | null> {
+    if (message.type === 'write-file-request') {
+      const { path: filePath, content } = message.payload;
+      const resolvedPath = path.resolve(filePath);
+
+      const authorization = await this.gatekeeper.authorize({
+        actor: this.name,
+        action: 'file-write',
+        params: {
+          path: resolvedPath,
+          taskId: 'delegated-task',
+          bytes: content.length,
+          actingOnBehalfOf: message.sender,
+        },
+      });
+
+      if (!authorization.granted) {
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: false, error: 'permission-denied' },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      try {
+        fs.writeFileSync(resolvedPath, content, 'utf8');
+        this.auditLog.recordOutcome(
+          authorization.correlationId,
+          this.name,
+          'file-write',
+          `success — wrote ${content.length} bytes to ${resolvedPath} (delegated on behalf of ${message.sender})`
+        );
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: true },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        this.auditLog.recordOutcome(
+          authorization.correlationId,
+          this.name,
+          'file-write',
+          `error — ${errMsg}`
+        );
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: false, error: errMsg },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    }
+    return null;
+  }
 }
+

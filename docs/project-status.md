@@ -29,13 +29,17 @@ This living status document captures the completion state of **Jarvis Phase 1, P
 | **3.2** | Memory Manager Core: store/query/getById methods, regex secrets redaction with audit logging, FIFO eviction policy tiebroken by rowid, and database-vector rollback write-consistency. | **COMPLETE** |
 | **3.3** | Agent Memory Integration: wired Software Engineer and Researcher agents for context recall on query and completion writing on success, with shared-by-project bidirectional recall. | **COMPLETE** |
 | **3.4** | Cross-Session Restart Proof & Documentation: wrote tests validating persistence of memory across DB/VectorStore close and reopen cycles (direct and agent-mediated), updated README and project status, and final ADR 0002. | **COMPLETE** |
+| **4.1** | Agent-to-Agent Messaging: routing, structured schemas, loop detection, correlation ID mapping, and pre/post audit logs. | **COMPLETE** |
+| **4.2** | New Worker Agents: Code Reviewer (`code-reviewer`) and Project Manager (`project-manager`) roles registered with default policy allow-lists. | **COMPLETE** |
+| **4.3** | Kanban boards data model: boards, columns, cards relational schema under `kanban-write` gatekeeper lock. | **COMPLETE** |
+| **4.4** | Dynamic routing & delegation security: dynamic task resolution and delegation without permission escalation. | **COMPLETE** |
 
 ### Total Project Test Count:
-**131 tests** pass successfully across **22 test files** inside the repository.
+**142 tests** pass successfully across **23 test files** inside the repository.
 
 ---
 
-## 🚫 Scope Exclusions (What Phases 1, 2 & 3 DO NOT Include)
+## 🚫 Scope Exclusions (What Phases 1, 2, 3 & 4 DO NOT Include)
 
 Consistent with the original master Phase 1 & Phase 2 charter specifications, the following architectural elements are excluded:
 - **No Voice Interface**: No speech recognition or speech synthesis.
@@ -48,9 +52,9 @@ Consistent with the original master Phase 1 & Phase 2 charter specifications, th
 
 ---
 
-## 🔮 Transition Notes (Phases 1-3)
+## 🔮 Transition Notes (Phases 1-4)
 
-A future developer picking up work after Phase 2 should review these technical design patterns locked in during Phase 1 and Phase 2:
+A future developer picking up work after Phase 4 should review these technical design patterns locked in during Phase 1, Phase 2, Phase 3, and Phase 4:
 
 1. **Recursive Secrets Redaction**:
    The `redactSecrets` utility in `core/src/lib/redact.ts` traverses error traces and nested objects/arrays recursively. This is the primary mechanism to filter keys like `apiKey` or secrets patterns. Callers should apply this before logging or persisting parameters.
@@ -72,6 +76,10 @@ A future developer picking up work after Phase 2 should review these technical d
    The embedding provider hashes character n-grams to form vector indexes. Retrieval executes via dynamic brute-force cosine similarity checks in JS/TS. While this eliminates build and platform-specific compilation hurdles, query costs grow linearly with the volume of memories (unmitigated by index trees).
 10. **Redaction Check Rejections (Phase 3 Note)**:
     Secrets match triggers validate AWS/API key regexes. Attempted writes of secret text are rejected immediately and audit logged with status 'denied' and redact-rejection explanations, bypassing gatekeeper prompts entirely.
+11. **Delegation Security Gating (Phase 4 Note)**:
+    Delegated actions check the ACTING agent allow-list strictly, not the sender. Privilege escalation is prevented. Correlation parameters show originating agent details in the decision audit record.
+12. **Kanban write isolation (Phase 4 Note)**:
+    Card writes are gated via `'kanban-write'` which only `'project-manager'` is allowed to write. Other agents request card changes strictly via message passing.
 
 ---
 
@@ -86,7 +94,7 @@ A future developer picking up work after Phase 2 should review these technical d
 
 ---
 
-## 🏁 Carry-Forward Item Resolution (Through Phase 3)
+## 🏁 Carry-Forward Item Resolution (Through Phase 4)
 
 The table below provides the authoritative final resolution status for all 7 carry-forward items and deferred technical debts from the master charter:
 
@@ -118,7 +126,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 
 ---
 
-## 📊 Self-Review Scorecard (Phases 1, 2 & 3 Complete)
+## 📊 Self-Review Scorecard (Phases 1-4 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |

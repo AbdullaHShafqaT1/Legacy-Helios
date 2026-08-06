@@ -12,9 +12,27 @@ describe('AgentRouter Class', () => {
     }),
   });
 
+  const mockTask = (description: string, fileContext?: string): any => ({
+    id: 't-1',
+    description,
+    file_context: fileContext || null,
+    status: 'pending',
+    priority: 0,
+    depends_on: null,
+    retries: 0,
+    max_retries: 3,
+    error: null,
+    result_json: null,
+    locked_by: null,
+    heartbeat_at: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    sequence_id: 1
+  });
+
   it('should throw AgentRouterError if resolve is called with no registered agents', () => {
     const router = new AgentRouter();
-    expect(() => router.resolve()).toThrow(AgentRouterError);
+    expect(() => router.resolve(mockTask('test'))).toThrow(AgentRouterError);
   });
 
   it('should register an agent and resolve it as the default', () => {
@@ -22,7 +40,7 @@ describe('AgentRouter Class', () => {
     const agent = createMockAgent('agent-1');
     router.register(agent);
 
-    const resolved = router.resolve();
+    const resolved = router.resolve(mockTask('test'));
     expect(resolved.name).toBe('agent-1');
   });
 
@@ -34,7 +52,7 @@ describe('AgentRouter Class', () => {
     router.register(agent1);
     router.register(agent2); // Registers but does not mark default
 
-    const resolved = router.resolve();
+    const resolved = router.resolve(mockTask('test'));
     expect(resolved.name).toBe('agent-1');
   });
 
@@ -46,7 +64,7 @@ describe('AgentRouter Class', () => {
     router.register(agent1);
     router.register(agent2, { isDefault: true });
 
-    const resolved = router.resolve();
+    const resolved = router.resolve(mockTask('test'));
     expect(resolved.name).toBe('agent-2');
   });
 });

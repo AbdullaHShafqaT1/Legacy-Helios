@@ -123,16 +123,19 @@ export class Orchestrator {
       // 3. Scan and recover any stale tasks
       this.queue.recoverStaleTasks(this.options.staleTaskTimeoutMs);
 
-      // 4. Resolve routing target agent
-      const agent = this.agentRouter.resolve();
-
-      // 5. Attempt claiming the next pending task
-      const task = this.queue.claimNext(agent.name);
+      // 4 & 5. Attempt claiming the next pending task using AgentRouter to resolve target agent dynamically
+      const task = this.queue.claimNext(this.agentRouter);
       if (!task) {
         // Queue is empty or blocked. Yield.
         this.inFlight = false;
         this.scheduleNext(this.options.pollIntervalMs);
         return;
+      }
+
+      // Resolve the actual agent instance for the claimed task
+      const agent = this.agentRouter.getAgent(task.locked_by!);
+      if (!agent) {
+        throw new Error(`Claimed task locked by unregistered agent "${task.locked_by}"`);
       }
 
       // 6. Process the claimed task

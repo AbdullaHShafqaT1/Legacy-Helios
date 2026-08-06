@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 export interface JarvisEvents {
+  'task:created': { taskId: string };
   'task:started': { taskId: string; agent: string };
   'task:completed': { taskId: string };
   'task:failed': { taskId: string; error: string; willRetry: boolean };

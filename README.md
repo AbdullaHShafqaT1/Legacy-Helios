@@ -251,9 +251,65 @@ await this.memoryManager.store({
 
 ---
 
+## 🤝 Collaborative Multi-Agent Swarms & Message Routing (Phase 4)
+
+Jarvis supports multi-agent swarms using a message router that enables agents to communicate in-process and coordinate tasks.
+
+### 1. Agent-to-Agent Message Schema
+All agent communication utilizes a structured `Message` type definition:
+* **`id`**: Unique UUID string identifier.
+* **`sender`**: Name of the originating agent (e.g. `'researcher'`).
+* **`recipient`**: Name of the target agent (e.g. `'software-engineer'`).
+* **`type`**: String message type identifier (e.g. `'review-request'`, `'review-result'`).
+* **`payload`**: Dynamic object context payload.
+* **`correlationId`**: ID of the request message when sending a reply.
+* **`actingOnBehalfOf`**: Identifies delegation contexts.
+* **`timestamp`**: ISO timestamp.
+* **`hops`**: Array of agent names that forwarded the message (used for loop detection).
+
+### 2. How to Add a New Message Type
+1. Define the message payload structure and register type keys if appropriate.
+2. In the target agent's `receiveMessage(message: AgentMessage): Promise<AgentMessage | null>` handler, add a case matching `message.type`:
+   ```typescript
+   if (message.type === 'my-new-message-type') {
+     // process message.payload
+     return {
+       id: crypto.randomUUID(),
+       sender: this.name,
+       recipient: message.sender,
+       type: 'my-response-type',
+       payload: { ... },
+       correlationId: message.id,
+       timestamp: new Date().toISOString()
+     };
+   }
+   ```
+3. Route the message via `messageRouter.send()` or `messageRouter.sendAndReceive()`.
+
+### 3. Kanban Schema Relation to Task Queue
+The Kanban boards data model tracks the lifecycle state of tasks enqueued in the `tasks` table:
+* Columns map task progression: `Todo` -> `In Progress` -> `Review` -> `Done`.
+* Tasks are linked to cards via the `task_id` column.
+* Card movements are driven by EventBus queue listeners (`task:created`, `task:started`, `task:completed`, `task:failed`) and agent-to-agent messaging outcomes (such as review rejections).
+* **Security restriction**: Database mutations to the Kanban tables require the `'kanban-write'` action, which is permitted exclusively for the `project-manager` agent role.
+
+### 4. Delegated Gating & Prevention of Privilege Escalation
+When an agent performs an action on behalf of another agent (e.g. Researcher requests Software Engineer to write a file), the request is gated by the Gatekeeper:
+* The Gatekeeper evaluates permissions strictly using the allow-list of the **ACTING** agent (`software-engineer`), never the sender (`researcher`).
+* Privilege escalation is impossible since permissions do not union. If a Software Engineer asks a Researcher to write a file, the action is blocked because the acting agent (`researcher`) lacks `'file-write'` permission.
+* The Audit Log captures both agents: `actor` records the acting agent (`software-engineer`), and `params.actingOnBehalfOf` records the sender (`researcher`).
+
+**Example Audit Record for Delegated Write:**
+* `actor`: `'software-engineer'`
+* `action`: `'file-write'`
+* `approval_status`: `'granted'`
+* `params_json`: `{"path":"/workspace/code.js","bytes":42,"actingOnBehalfOf":"researcher"}`
+
+---
+
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **131 tests across 22 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, and cross-agent shared project recalls.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **142 tests across 23 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, and cross-agent shared project recalls.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:

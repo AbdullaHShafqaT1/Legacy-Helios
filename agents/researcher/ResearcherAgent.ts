@@ -1,9 +1,10 @@
 import { Logger } from 'pino';
-import { Agent, AgentTaskInput, AgentResult, deriveProjectTag } from '../shared/Agent.js';
+import { Agent, AgentTaskInput, AgentResult, AgentMessage, deriveProjectTag } from '../shared/Agent.js';
 import { ModelRouter } from '../../core/src/router/modelRouter.js';
 import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConnector.js';
 import { redactSecrets } from '../../core/src/lib/redact.js';
 import { MemoryManager } from '../../core/src/memory/memoryManager.js';
+import { MessageRouter } from '../../core/src/router/messageRouter.js';
 
 export interface ResearchAgentResult extends AgentResult {
   summary?: string;
@@ -18,17 +19,20 @@ export class ResearcherAgent implements Agent {
   private readonly filesystemConnector?: FilesystemConnector;
   private readonly memoryManager: MemoryManager;
   private readonly logger: Logger;
+  private readonly messageRouter?: MessageRouter;
 
   constructor(
     modelRouter: ModelRouter,
     filesystemConnector: FilesystemConnector | undefined,
     memoryManager: MemoryManager,
-    logger: Logger
+    logger: Logger,
+    messageRouter?: MessageRouter
   ) {
     this.modelRouter = modelRouter;
     this.filesystemConnector = filesystemConnector;
     this.memoryManager = memoryManager;
     this.logger = logger;
+    this.messageRouter = messageRouter;
   }
 
   /**
@@ -193,5 +197,12 @@ export class ResearcherAgent implements Agent {
     }
 
     return finalResult;
+  }
+
+  /**
+   * Listens for incoming messages (returns null by default).
+   */
+  async receiveMessage(message: AgentMessage): Promise<AgentMessage | null> {
+    return null;
   }
 }

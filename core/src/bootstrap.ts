@@ -15,6 +15,12 @@ import { SqliteVectorStore } from './memory/vectorStore.js';
 import { LocalEmbeddingProvider } from './memory/embeddingProvider.js';
 import { EmbeddingPipeline } from './memory/embeddingPipeline.js';
 import { MemoryManager } from './memory/memoryManager.js';
+import { KanbanConnector } from '../../connectors/kanban/KanbanConnector.js';
+import { MessageRouter } from './router/messageRouter.js';
+import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
+import { CodeReviewerAgent } from '../../agents/code-reviewer/CodeReviewerAgent.js';
+import { ProjectManagerAgent } from '../../agents/project-manager/ProjectManagerAgent.js';
+import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConnector.js';
 
 export interface CliContext {
   config: Config;
@@ -30,6 +36,8 @@ export interface JarvisContext extends CliContext {
   agentRouter: AgentRouter;
   eventBus: JarvisEventBus;
   memoryManager: MemoryManager;
+  messageRouter: MessageRouter;
+  kanbanConnector: KanbanConnector;
 }
 
 /**
@@ -67,7 +75,8 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
 
   const logger = createLogger(loggerName, config.logLevel);
   const db = openDb(config.dbPath);
-  const queue = new TaskQueue(db, createLogger('task-queue', config.logLevel));
+  const eventBus = new JarvisEventBus();
+  const queue = new TaskQueue(db, createLogger('task-queue', config.logLevel), eventBus);
   const auditLog = new AuditLog(db);
 
   const gatekeeper = new PermissionGatekeeper(
@@ -100,16 +109,83 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
   );
 
   const agentRouter = new AgentRouter();
+  const messageRouter = new MessageRouter(
+    agentRouter,
+    auditLog,
+    createLogger('message-router', config.logLevel)
+  );
+
+  const filesystemConnector = new FilesystemConnector({
+    projectRoot: config.projectRoot,
+    gatekeeper,
+    auditLog,
+    logger: createLogger('filesystem-connector', config.logLevel),
+  });
+
+  const kanbanConnector = new KanbanConnector(
+    db,
+    gatekeeper,
+    auditLog,
+    createLogger('kanban-connector', config.logLevel)
+  );
+
   const softwareEngineer = new SoftwareEngineerAgent(
     modelRouter,
     gatekeeper,
     auditLog,
     memoryManager,
-    createLogger('agent:software-engineer', config.logLevel)
+    createLogger('agent:software-engineer', config.logLevel),
+    messageRouter
   );
   agentRouter.register(softwareEngineer, { isDefault: true });
 
-  const eventBus = new JarvisEventBus();
+  const researcher = new ResearcherAgent(
+    modelRouter,
+    filesystemConnector,
+    memoryManager,
+    createLogger('agent:researcher', config.logLevel),
+    messageRouter
+  );
+  agentRouter.register(researcher);
+
+  const codeReviewer = new CodeReviewerAgent(
+    modelRouter,
+    filesystemConnector,
+    messageRouter,
+    createLogger('agent:code-reviewer', config.logLevel)
+  );
+  agentRouter.register(codeReviewer);
+
+  const projectManager = new ProjectManagerAgent(
+    modelRouter,
+    kanbanConnector,
+    queue,
+    messageRouter,
+    createLogger('agent:project-manager', config.logLevel)
+  );
+  agentRouter.register(projectManager);
+
+  // Subscribe Project Manager to event bus lifecycle events
+  eventBus.on('task:created', (data) => {
+    projectManager.handleTaskCreated(data).catch(err => {
+      logger.error({ err }, 'Failed handling task:created event.');
+    });
+  });
+  eventBus.on('task:started', (data) => {
+    projectManager.handleTaskStarted(data).catch(err => {
+      logger.error({ err }, 'Failed handling task:started event.');
+    });
+  });
+  eventBus.on('task:completed', (data) => {
+    projectManager.handleTaskCompleted(data).catch(err => {
+      logger.error({ err }, 'Failed handling task:completed event.');
+    });
+  });
+  eventBus.on('task:failed', (data) => {
+    projectManager.handleTaskFailed(data).catch(err => {
+      logger.error({ err }, 'Failed handling task:failed event.');
+    });
+  });
 
   return {
     config,
@@ -122,5 +198,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     agentRouter,
     eventBus,
     memoryManager,
+    messageRouter,
+    kanbanConnector,
   };
 }

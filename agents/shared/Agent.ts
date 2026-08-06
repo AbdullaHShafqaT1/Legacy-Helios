@@ -13,9 +13,22 @@ export interface AgentResult {
   error?: string;
 }
 
+export interface AgentMessage {
+  id: string;
+  sender: string;
+  recipient: string;
+  type: string;
+  payload: any;
+  correlationId?: string;
+  actingOnBehalfOf?: string;
+  timestamp: string;
+  hops?: string[];
+}
+
 export interface Agent {
   readonly name: string;
   process(input: AgentTaskInput): Promise<AgentResult>;
+  receiveMessage?(message: AgentMessage): Promise<AgentMessage | null>;
 }
 
 /**

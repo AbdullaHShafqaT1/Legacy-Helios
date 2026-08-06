@@ -7,7 +7,8 @@ export type GuardedAction =
   | 'git-history-rewrite'
   | 'destructive'
   | 'memory-write'
-  | 'memory-read';
+  | 'memory-read'
+  | 'kanban-write';
 
 export interface AgentPolicy {
   allowedActions: (GuardedAction | string)[];
@@ -43,5 +44,13 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
   'researcher': {
     allowedActions: ['file-read', 'memory-read', 'memory-write'],
     autoApproveActions: ['file-read', 'memory-read'],
+  },
+  'code-reviewer': {
+    allowedActions: ['file-read', 'memory-read', 'memory-write'],
+    autoApproveActions: ['file-read', 'memory-read'],
+  },
+  'project-manager': {
+    allowedActions: ['memory-read', 'memory-write', 'kanban-write'],
+    autoApproveActions: ['memory-read', 'kanban-write'],
   },
 };

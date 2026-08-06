@@ -120,6 +120,39 @@ export function openDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_memory_entries_source_agent ON memory_entries (source_agent);
     CREATE INDEX IF NOT EXISTS idx_memory_entries_tag ON memory_entries (tag);
     CREATE INDEX IF NOT EXISTS idx_memory_entries_timestamp ON memory_entries (timestamp);
+
+    CREATE TABLE IF NOT EXISTS kanban_boards (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS kanban_columns (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (board_id) REFERENCES kanban_boards (id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS kanban_cards (
+      id TEXT PRIMARY KEY,
+      column_id TEXT NOT NULL,
+      task_id TEXT UNIQUE,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (column_id) REFERENCES kanban_columns (id) ON DELETE CASCADE,
+      FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_kanban_columns_board_id ON kanban_columns (board_id);
+    CREATE INDEX IF NOT EXISTS idx_kanban_cards_column_id ON kanban_cards (column_id);
+    CREATE INDEX IF NOT EXISTS idx_kanban_cards_task_id ON kanban_cards (task_id);
   `;
 
   // Run migration check if table 'tasks' already exists before executing schemaDdl

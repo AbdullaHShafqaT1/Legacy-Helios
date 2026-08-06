@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
+import { JarvisEventBus } from '../events/bus.js';
 
 /**
  * Custom error thrown by the TaskQueue class.
@@ -49,10 +50,12 @@ export interface EnqueueInput {
 export class TaskQueue {
   private db: Database.Database;
   private logger: Logger;
+  private eventBus?: JarvisEventBus;
 
-  constructor(db: Database.Database, logger: Logger) {
+  constructor(db: Database.Database, logger: Logger, eventBus?: JarvisEventBus) {
     this.db = db;
     this.logger = logger;
+    this.eventBus = eventBus;
   }
 
   /**
@@ -111,6 +114,10 @@ export class TaskQueue {
       throw new TaskQueueError(`Failed to retrieve task with ID "${taskId}" after insertion.`);
     }
 
+    if (this.eventBus) {
+      this.eventBus.emit('task:created', { taskId });
+    }
+
     return inserted;
   }
 
@@ -134,7 +141,7 @@ export class TaskQueue {
    * @param agentName Name of the claiming agent thread.
    * @returns The claimed TaskRow, or null if no tasks are eligible.
    */
-  claimNext(agentName: string): TaskRow | null {
+  claimNext(routerOrName: any): TaskRow | null {
     // 1. Resolve blocked dependencies first
     this.resolveBlockedDependencies();
 
@@ -152,6 +159,15 @@ export class TaskQueue {
         if (!dep || dep.status !== 'completed') {
           continue; // Leave pending, try next
         }
+      }
+
+      // Resolve agent name dynamically or fallback
+      let agentName: string;
+      if (routerOrName && typeof routerOrName.resolve === 'function') {
+        const resolved = routerOrName.resolve(candidate);
+        agentName = resolved.name;
+      } else {
+        agentName = routerOrName || 'software-engineer';
       }
 
       // 4. Atomically claim task (checks and handles target state update race condition)
@@ -200,6 +216,21 @@ export class TaskQueue {
     const resultRun = completeStmt.run(resultJson, now, taskId);
     if (resultRun.changes === 0) {
       throw new TaskQueueError(`Failed to complete task: Task with ID "${taskId}" not found.`);
+    }
+  }
+
+  /**
+   * Resets a task back to pending status for re-execution (e.g. on review failure).
+   */
+  requeue(taskId: string, reason: string): void {
+    const now = new Date().toISOString();
+    const result = this.db.prepare(`
+      UPDATE tasks
+      SET status = 'pending', error = ?, heartbeat_at = NULL, locked_by = NULL, updated_at = ?
+      WHERE id = ?
+    `).run(reason, now, taskId);
+    if (result.changes === 0) {
+      throw new TaskQueueError(`Failed to requeue task: Task with ID "${taskId}" not found.`);
     }
   }
 
