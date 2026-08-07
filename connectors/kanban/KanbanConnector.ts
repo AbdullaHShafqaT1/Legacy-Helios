@@ -34,17 +34,23 @@ export class KanbanConnector {
   private gatekeeper: PermissionGatekeeper;
   private auditLog: AuditLog;
   private logger: Logger;
+  private defaultBoardId: string;
+  private defaultBoardName: string;
 
   constructor(
     db: Database.Database,
     gatekeeper: PermissionGatekeeper,
     auditLog: AuditLog,
-    logger: Logger
+    logger: Logger,
+    defaultBoardId = 'default-board',
+    defaultBoardName = 'Default Board'
   ) {
     this.db = db;
     this.gatekeeper = gatekeeper;
     this.auditLog = auditLog;
     this.logger = logger;
+    this.defaultBoardId = defaultBoardId;
+    this.defaultBoardName = defaultBoardName;
   }
 
   private async authorizeWrite(actor: string, operation: string, params: Record<string, any>): Promise<string> {
@@ -71,7 +77,7 @@ export class KanbanConnector {
     return decision.correlationId;
   }
 
-  async initDefaultBoard(actor: string, boardId = 'default-board', name = 'Default Board'): Promise<void> {
+  async initDefaultBoard(actor: string, boardId = this.defaultBoardId, name = this.defaultBoardName): Promise<void> {
     const existing = this.db.prepare('SELECT id FROM kanban_boards WHERE id = ?').get(boardId);
     if (existing) return;
 

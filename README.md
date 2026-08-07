@@ -309,7 +309,7 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **142 tests across 23 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, and cross-agent shared project recalls.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **148 tests across 23 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, and cross-agent shared project recalls.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:

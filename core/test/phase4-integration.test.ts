@@ -52,7 +52,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     logger = createLogger('phase4-int-logger', 'silent');
     eventBus = new JarvisEventBus();
     queue = new TaskQueue(db, logger, eventBus);
-    
+
     mockStandardPrompt = vi.fn().mockResolvedValue(true);
     mockHighFrictionPrompt = vi.fn().mockResolvedValue(true);
 
@@ -186,7 +186,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     try {
       db.close();
       fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
+    } catch { }
   });
 
   describe('1. Agent-to-Agent Messaging Routing & Schemas', () => {
@@ -210,6 +210,79 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       expect(reply.type).toBe('review-result');
       expect(reply.correlationId).toBe(request.id);
       expect(reply.payload.verdict).toBe('approved');
+    });
+
+    it('should fail validation if message ID is missing', async () => {
+      const request: any = {
+        sender: 'software-engineer',
+        recipient: 'code-reviewer',
+        type: 'review-request',
+        payload: {},
+        timestamp: new Date().toISOString(),
+      };
+      await expect(messageRouter.send(request)).rejects.toThrow('Message ID is required.');
+    });
+
+    it('should fail validation if message sender is missing', async () => {
+      const request: any = {
+        id: crypto.randomUUID(),
+        recipient: 'code-reviewer',
+        type: 'review-request',
+        payload: {},
+        timestamp: new Date().toISOString(),
+      };
+      await expect(messageRouter.send(request)).rejects.toThrow('Message sender is required.');
+    });
+
+    it('should fail validation if message recipient is missing', async () => {
+      const request: any = {
+        id: crypto.randomUUID(),
+        sender: 'software-engineer',
+        type: 'review-request',
+        payload: {},
+        timestamp: new Date().toISOString(),
+      };
+      await expect(messageRouter.send(request)).rejects.toThrow('Message recipient is required.');
+    });
+
+    it('should fail validation if message type is missing', async () => {
+      const request: any = {
+        id: crypto.randomUUID(),
+        sender: 'software-engineer',
+        recipient: 'code-reviewer',
+        payload: {},
+        timestamp: new Date().toISOString(),
+      };
+      await expect(messageRouter.send(request)).rejects.toThrow('Message type is required.');
+    });
+
+    it('should fail validation if message timestamp is missing', async () => {
+      const request: any = {
+        id: crypto.randomUUID(),
+        sender: 'software-engineer',
+        recipient: 'code-reviewer',
+        type: 'review-request',
+        payload: {},
+      };
+      await expect(messageRouter.send(request)).rejects.toThrow('Message timestamp is required.');
+    });
+
+    it('should match reply correlationId with request ID as a standalone concern', async () => {
+      const request: any = {
+        id: 'req-uuid-12345',
+        sender: 'software-engineer',
+        recipient: 'code-reviewer',
+        type: 'review-request',
+        payload: {
+          taskId: 't-1',
+          description: 'Review mock write',
+          filesChanged: [],
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      const reply = await messageRouter.sendAndReceive(request);
+      expect(reply.correlationId).toBe('req-uuid-12345');
     });
 
     it('should throw error when routing to unregistered/nonexistent agent', async () => {

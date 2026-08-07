@@ -112,7 +112,9 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
   const messageRouter = new MessageRouter(
     agentRouter,
     auditLog,
-    createLogger('message-router', config.logLevel)
+    createLogger('message-router', config.logLevel),
+    10, // maxHops
+    config.messageTimeoutMs ?? 10000
   );
 
   const filesystemConnector = new FilesystemConnector({
@@ -126,7 +128,9 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     db,
     gatekeeper,
     auditLog,
-    createLogger('kanban-connector', config.logLevel)
+    createLogger('kanban-connector', config.logLevel),
+    config.kanbanDefaultBoardId ?? 'default-board',
+    config.kanbanDefaultBoardName ?? 'Default Board'
   );
 
   const softwareEngineer = new SoftwareEngineerAgent(
