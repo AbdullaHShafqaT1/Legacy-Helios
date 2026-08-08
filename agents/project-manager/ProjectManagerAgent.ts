@@ -164,6 +164,7 @@ export class ProjectManagerAgent implements Agent {
         type: 'status-update',
         payload: { success: true },
         correlationId: message.id,
+        hops: message.hops,
         timestamp: new Date().toISOString(),
       };
     }
@@ -177,6 +178,7 @@ export class ProjectManagerAgent implements Agent {
         type: 'status-report',
         payload: { report },
         correlationId: message.id,
+        hops: message.hops,
         timestamp: new Date().toISOString(),
       };
     }

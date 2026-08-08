@@ -143,7 +143,9 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       filesystemConnector,
       memoryManager,
       logger,
-      messageRouter
+      messageRouter,
+      gatekeeper,
+      auditLog
     );
     agentRouter.register(researcher);
 
@@ -354,6 +356,24 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // and software-engineer is in message.hops, send should reject with MessageLoopError
       await expect(messageRouter.send(request)).rejects.toThrow(MessageLoopError);
     });
+
+    it('should detect message loops across real production agents (CodeReviewer and ProjectManager) and throw MessageLoopError', async () => {
+      const request: any = {
+        id: crypto.randomUUID(),
+        sender: 'project-manager',
+        recipient: 'code-reviewer',
+        type: 'review-request',
+        payload: {
+          taskId: 't-loop-test',
+          description: 'Loop check with real agents',
+          filesChanged: [],
+        },
+        timestamp: new Date().toISOString(),
+        hops: ['project-manager'],
+      };
+
+      await expect(messageRouter.send(request)).rejects.toThrow(MessageLoopError);
+    });
   });
 
   describe('3. Permission Escalation via Delegation Gating', () => {
@@ -387,33 +407,11 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     });
 
     it('should BLOCK delegated file write if acting agent allow-list does not permit it (no escalation / reverse direction)', async () => {
-      // Create a mock agent 'tester' that has NO write permission, and Software Engineer asks it to write
-      const testerAgent = {
-        name: 'researcher', // uses researcher role policy (read-only)
-        process: async () => ({ status: 'completed', filesChanged: [], explanation: '' } as any),
-        receiveMessage: async (msg: any) => {
-          if (msg.type === 'write-file-request') {
-            const { path: filePath, content } = msg.payload;
-            // ResearcherConnector/Connector call which calls gatekeeper.authorize
-            const auth = await gatekeeper.authorize({
-              actor: 'researcher', // acting is researcher
-              action: 'file-write',
-              params: { path: filePath, actingOnBehalfOf: msg.sender },
-            });
-            return {
-              id: crypto.randomUUID(),
-              sender: 'researcher',
-              recipient: msg.sender,
-              type: 'write-file-response',
-              payload: { success: auth.granted, error: auth.denialReason },
-              correlationId: msg.id,
-              timestamp: new Date().toISOString(),
-            };
-          }
-          return null;
-        },
-      };
-      agentRouter.register(testerAgent as any);
+      // Confirm via a new assertion that agentRouter.getAgent('researcher') is the real ResearcherAgent class instance before the test runs
+      const activeResearcher = agentRouter.getAgent('researcher');
+      expect(activeResearcher).toBeDefined();
+      expect(activeResearcher instanceof ResearcherAgent).toBe(true);
+
       const request: any = {
         id: crypto.randomUUID(),
         sender: 'software-engineer', // sender has permission
@@ -425,7 +423,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
 
       const response = await messageRouter.sendAndReceive(request);
       expect(response.payload.success).toBe(false);
-      expect(response.payload.error).toBe('not-permitted');
+      expect(response.payload.error).toBe('permission-denied');
       expect(fs.existsSync(path.join(tempDir, 'failed_delegation.txt'))).toBe(false);
 
       // Verify Audit Log decision row shows researcher actor denied

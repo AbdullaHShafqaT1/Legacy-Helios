@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1, 2 & 3 Complete)
+# Jarvis OS Project Status (Phases 1, 2, 3 & 4 Complete)
 
-This living status document captures the completion state of **Jarvis Phase 1, Phase 2 & Phase 3 (through Sub-task 3.4)**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phase 1, Phase 2, Phase 3 & Phase 4 (through Sub-task 4.4)**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -35,7 +35,7 @@ This living status document captures the completion state of **Jarvis Phase 1, P
 | **4.4** | Dynamic routing & delegation security: dynamic task resolution and delegation without permission escalation. | **COMPLETE** |
 
 ### Total Project Test Count:
-**148 tests** pass successfully across **23 test files** inside the repository.
+**149 tests** pass successfully across **23 test files** inside the repository.
 
 ---
 
@@ -80,6 +80,8 @@ A future developer picking up work after Phase 4 should review these technical d
     Delegated actions check the ACTING agent allow-list strictly, not the sender. Privilege escalation is prevented. Correlation parameters show originating agent details in the decision audit record.
 12. **Kanban write isolation (Phase 4 Note)**:
     Card writes are gated via `'kanban-write'` which only `'project-manager'` is allowed to write. Other agents request card changes strictly via message passing.
+13. **Code Reviewer Error Propagation (Phase 4 Note)**:
+    `CodeReviewerAgent` was updated to propagate message-send routing exceptions (such as `MessageLoopError`) upwards during peer-to-peer review result notification, rather than catching and swallowing them in logs.
 
 ---
 
@@ -139,7 +141,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
 | **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions, correcting early vector store labels to `'sqlite-json-cosine'`. |
 | **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, carry-forward resolutions, transitional developer notes, and dynamic agent memory examples. |
-| **Testing** | **PASS** | The test suite reaches **131 tests across 22 files**, covering the core queue, gatekeepers, filesystem, git, memory manager rollbacks, cross-agent integration, and file-restart persistence. |
+| **Testing** | **PASS** | The test suite reaches **149 tests across 23 files**, covering the core queue, gatekeepers, filesystem, git, memory manager rollbacks, cross-agent integration, file-restart persistence, and swarm message loop routing. |
 | **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via monotonic `sequence_id`, same-millisecond FIFO evictions are rowid-tiebroken, and cross-session restarts are verified. |
 | **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, proper process exit codes, and automated CI pipelines. |
 | **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |

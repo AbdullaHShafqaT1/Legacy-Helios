@@ -3,7 +3,7 @@ import { Logger } from 'pino';
 import { Agent, AgentTaskInput, AgentResult, AgentMessage } from '../shared/Agent.js';
 import { ModelRouter } from '../../core/src/router/modelRouter.js';
 import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConnector.js';
-import { MessageRouter } from '../../core/src/router/messageRouter.js';
+import { MessageRouter, MessageRouterError } from '../../core/src/router/messageRouter.js';
 
 export interface CodeReviewerResult extends AgentResult {
   verdict?: 'approved' | 'request-changes';
@@ -72,6 +72,7 @@ export class CodeReviewerAgent implements Agent {
         issues: reviewResult.issues,
         explanation: reviewResult.explanation,
       },
+      hops: message.hops,
       timestamp: new Date().toISOString(),
     };
 
@@ -79,6 +80,7 @@ export class CodeReviewerAgent implements Agent {
       await this.messageRouter.send(pmMessage);
     } catch (err: any) {
       this.logger.error({ err }, 'Failed to notify project-manager of review result.');
+      throw err;
     }
 
     // Return the response back to the sender
@@ -93,6 +95,7 @@ export class CodeReviewerAgent implements Agent {
         issues: reviewResult.issues,
         explanation: reviewResult.explanation,
       },
+      hops: message.hops,
       correlationId: message.id,
       timestamp: new Date().toISOString(),
     };

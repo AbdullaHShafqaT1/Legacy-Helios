@@ -5,6 +5,11 @@ import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConne
 import { redactSecrets } from '../../core/src/lib/redact.js';
 import { MemoryManager } from '../../core/src/memory/memoryManager.js';
 import { MessageRouter } from '../../core/src/router/messageRouter.js';
+import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
+import { AuditLog } from '../../core/src/permissions/auditLog.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
 export interface ResearchAgentResult extends AgentResult {
   summary?: string;
@@ -20,19 +25,25 @@ export class ResearcherAgent implements Agent {
   private readonly memoryManager: MemoryManager;
   private readonly logger: Logger;
   private readonly messageRouter?: MessageRouter;
+  private readonly gatekeeper?: PermissionGatekeeper;
+  private readonly auditLog?: AuditLog;
 
   constructor(
     modelRouter: ModelRouter,
     filesystemConnector: FilesystemConnector | undefined,
     memoryManager: MemoryManager,
     logger: Logger,
-    messageRouter?: MessageRouter
+    messageRouter?: MessageRouter,
+    gatekeeper?: PermissionGatekeeper,
+    auditLog?: AuditLog
   ) {
     this.modelRouter = modelRouter;
     this.filesystemConnector = filesystemConnector;
     this.memoryManager = memoryManager;
     this.logger = logger;
     this.messageRouter = messageRouter;
+    this.gatekeeper = gatekeeper;
+    this.auditLog = auditLog;
   }
 
   /**
@@ -200,9 +211,96 @@ export class ResearcherAgent implements Agent {
   }
 
   /**
-   * Listens for incoming messages (returns null by default).
+   * Listens for incoming messages (e.g. delegated write-file requests).
    */
   async receiveMessage(message: AgentMessage): Promise<AgentMessage | null> {
+    if (message.type === 'write-file-request') {
+      if (!this.gatekeeper) {
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: false, error: 'gatekeeper-not-configured' },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      const { path: filePath, content } = message.payload;
+      const resolvedPath = path.resolve(filePath);
+
+      const authorization = await this.gatekeeper.authorize({
+        actor: this.name,
+        action: 'file-write',
+        params: {
+          path: resolvedPath,
+          taskId: 'delegated-task',
+          bytes: content?.length || 0,
+          actingOnBehalfOf: message.sender,
+        },
+      });
+
+      if (!authorization.granted) {
+        if (this.auditLog) {
+          this.auditLog.recordOutcome(
+            authorization.correlationId,
+            this.name,
+            'file-write',
+            'denied — not-permitted'
+          );
+        }
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: false, error: 'permission-denied' },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      try {
+        fs.writeFileSync(resolvedPath, content, 'utf8');
+        if (this.auditLog) {
+          this.auditLog.recordOutcome(
+            authorization.correlationId,
+            this.name,
+            'file-write',
+            `success — wrote ${content.length} bytes to ${resolvedPath}`
+          );
+        }
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: true },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        if (this.auditLog) {
+          this.auditLog.recordOutcome(
+            authorization.correlationId,
+            this.name,
+            'file-write',
+            `error — ${errMsg}`
+          );
+        }
+        return {
+          id: crypto.randomUUID(),
+          sender: this.name,
+          recipient: message.sender,
+          type: 'write-file-response',
+          payload: { success: false, error: errMsg },
+          correlationId: message.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    }
     return null;
   }
 }
