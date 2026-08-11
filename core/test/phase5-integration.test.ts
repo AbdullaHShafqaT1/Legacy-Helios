@@ -215,6 +215,56 @@ describe('Phase 5 - Delegation Safety, Browser, and Terminal Operator Integratio
       expect(mockHighFrictionPrompt).toHaveBeenCalled();
     });
 
+    it('should ALLOW delegated browser-read from Researcher to BrowserOperator on an external URL, evaluated at browser-operator tier (not researcher tier)', async () => {
+      // This test proves delegation non-escalation:
+      // - researcher has NO browser permissions at all
+      // - browser-operator has browser-read auto-approved (policy tier)
+      // - The gatekeeper must use browser-operator's policy, not researcher's
+      // - If researcher's policy were applied, the request would be denied (no browser-read in its allow-list)
+      // - If browser-operator's policy is applied correctly, it is auto-approved ('policy' approver)
+      //
+      // We stub BrowserConnector.ensureBrowser at the prototype level so no real Playwright binary
+      // is launched; the gatekeeper.authorize path runs in full (not mocked) so the audit log is populated.
+      const fakePage = {
+        goto: vi.fn().mockResolvedValue(undefined),
+        innerText: vi.fn().mockResolvedValue('hello'),
+        click: vi.fn(),
+        fill: vi.fn(),
+        setInputFiles: vi.fn(),
+        waitForEvent: vi.fn(),
+      };
+      const ensureBrowserStub = vi
+        .spyOn(browserConnector as any, 'ensureBrowser')
+        .mockResolvedValue(fakePage as any);
+
+      const requestMsg = {
+        id: crypto.randomUUID(),
+        sender: 'researcher',
+        recipient: 'browser-operator',
+        type: 'browser-navigate',
+        payload: { url: 'https://example.com' },
+        timestamp: new Date().toISOString(),
+      };
+
+      const response = await messageRouter.sendAndReceive(requestMsg);
+      expect(response.payload.success).toBe(true);
+
+      // Verify gatekeeper evaluated browser-operator's policy — not researcher's.
+      // actor must be 'browser-operator'; approver must be 'policy' (auto-approved for browser-read).
+      const recent = auditLog.recent();
+      const readDecision = recent.find(
+        (r) => r.event_type === 'decision' && r.action === 'browser-read' && r.actor === 'browser-operator'
+      );
+      expect(readDecision).toBeDefined();
+      expect(readDecision?.approval_status).toBe('granted');
+      expect(readDecision?.approver).toBe('policy'); // browser-operator's auto-approve — NOT researcher's policy
+
+      const params = JSON.parse(readDecision?.params_json || '{}');
+      expect(params.actingOnBehalfOf).toBe('researcher'); // originator recorded in params
+
+      ensureBrowserStub.mockRestore();
+    });
+
     it('should BLOCK delegated browser navigate to file:// URL (restricted resource) from Researcher', async () => {
       const requestMsg = {
         id: crypto.randomUUID(),
