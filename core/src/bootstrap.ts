@@ -21,6 +21,10 @@ import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
 import { CodeReviewerAgent } from '../../agents/code-reviewer/CodeReviewerAgent.js';
 import { ProjectManagerAgent } from '../../agents/project-manager/ProjectManagerAgent.js';
 import { FilesystemConnector } from '../../connectors/filesystem/FilesystemConnector.js';
+import { BrowserConnector } from '../../connectors/browser/BrowserConnector.js';
+import { TerminalConnector } from '../../connectors/terminal/TerminalConnector.js';
+import { BrowserOperatorAgent } from '../../agents/browser-operator/BrowserOperatorAgent.js';
+import { TerminalOperatorAgent } from '../../agents/terminal-operator/TerminalOperatorAgent.js';
 
 export interface CliContext {
   config: Config;
@@ -38,6 +42,8 @@ export interface JarvisContext extends CliContext {
   memoryManager: MemoryManager;
   messageRouter: MessageRouter;
   kanbanConnector: KanbanConnector;
+  browserConnector?: BrowserConnector;
+  terminalConnector?: TerminalConnector;
 }
 
 /**
@@ -133,6 +139,21 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     config.kanbanDefaultBoardName ?? 'Default Board'
   );
 
+  const browserConnector = new BrowserConnector({
+    gatekeeper,
+    auditLog,
+    logger: createLogger('browser-connector', config.logLevel),
+    headless: config.browserHeadless,
+  });
+
+  const terminalConnector = new TerminalConnector({
+    projectRoot: config.projectRoot,
+    gatekeeper,
+    auditLog,
+    logger: createLogger('terminal-connector', config.logLevel),
+    timeoutMs: config.terminalTimeoutMs,
+  });
+
   const softwareEngineer = new SoftwareEngineerAgent(
     modelRouter,
     gatekeeper,
@@ -169,6 +190,24 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
   );
   agentRouter.register(projectManager);
 
+  const browserOperator = new BrowserOperatorAgent(
+    modelRouter,
+    browserConnector,
+    memoryManager,
+    createLogger('agent:browser-operator', config.logLevel),
+    messageRouter
+  );
+  agentRouter.register(browserOperator);
+
+  const terminalOperator = new TerminalOperatorAgent(
+    modelRouter,
+    terminalConnector,
+    memoryManager,
+    createLogger('agent:terminal-operator', config.logLevel),
+    messageRouter
+  );
+  agentRouter.register(terminalOperator);
+
   // Subscribe Project Manager to event bus lifecycle events
   eventBus.on('task:created', (data) => {
     projectManager.handleTaskCreated(data).catch(err => {
@@ -191,6 +230,16 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     });
   });
 
+  // Emergency stop hook: make sure browser and terminal processes are killed cleanly
+  eventBus.on('queue:emergency-stop', () => {
+    browserConnector.close().catch(err => {
+      logger.error({ err }, 'Failed to close browser connector during emergency stop.');
+    });
+    terminalConnector.killAll().catch(err => {
+      logger.error({ err }, 'Failed to kill all terminal processes during emergency stop.');
+    });
+  });
+
   return {
     config,
     logger,
@@ -204,5 +253,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     memoryManager,
     messageRouter,
     kanbanConnector,
+    browserConnector,
+    terminalConnector,
   };
 }

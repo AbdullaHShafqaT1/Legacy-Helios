@@ -8,7 +8,11 @@ export type GuardedAction =
   | 'destructive'
   | 'memory-write'
   | 'memory-read'
-  | 'kanban-write';
+  | 'kanban-write'
+  | 'browser-read'
+  | 'browser-write'
+  | 'browser-admin'
+  | 'terminal-run';
 
 export interface AgentPolicy {
   allowedActions: (GuardedAction | string)[];
@@ -52,5 +56,13 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
   'project-manager': {
     allowedActions: ['memory-read', 'memory-write', 'kanban-write'],
     autoApproveActions: ['memory-read', 'kanban-write'],
+  },
+  'browser-operator': {
+    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write'],
+    autoApproveActions: ['browser-read', 'memory-read'],
+  },
+  'terminal-operator': {
+    allowedActions: ['terminal-run', 'memory-read', 'memory-write'],
+    autoApproveActions: ['memory-read'],
   },
 };

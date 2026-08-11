@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1, 2, 3 & 4 Complete)
+# Jarvis OS Project Status (Phases 1–5 Complete)
 
-This living status document captures the completion state of **Jarvis Phase 1, Phase 2, Phase 3 & Phase 4 (through Sub-task 4.4)**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phases 1 through 5**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -33,28 +33,33 @@ This living status document captures the completion state of **Jarvis Phase 1, P
 | **4.2** | New Worker Agents: Code Reviewer (`code-reviewer`) and Project Manager (`project-manager`) roles registered with default policy allow-lists. | **COMPLETE** |
 | **4.3** | Kanban boards data model: boards, columns, cards relational schema under `kanban-write` gatekeeper lock. | **COMPLETE** |
 | **4.4** | Dynamic routing & delegation security: dynamic task resolution and delegation without permission escalation. | **COMPLETE** |
+| **5.1** | Browser Automation Connector: gated Playwright-based `BrowserConnector` with risk-tiered action taxonomy (`browser-read`, `browser-write`, `browser-admin`), local-URL blocking, allowlist enforcement, and audit logging. | **COMPLETE** |
+| **5.2** | Browser Operator Agent: `BrowserOperatorAgent` with dedicated role policy wired into bootstrap, Gatekeeper integration, and unit test coverage. | **COMPLETE** |
+| **5.3** | Terminal Operator Connector & Agent: path-scoped `TerminalConnector` with configurable timeout, clean process-tree kill (`taskkill` on Windows / `SIGKILL` on Unix), low-risk command pre-approval allowlist, high-friction gating for non-allowlisted commands, secrets redaction on stdout/stderr, and `TerminalOperatorAgent` with role policy. | **COMPLETE** |
+| **5.4** | Delegation Safety (Adversarial Test): integration test verifying that a low-permission `researcher` agent cannot escalate to `terminal-run` or `browser-write` actions even via delegation message paths. | **COMPLETE** |
+| **5.5** | Cross-Platform Verification: audited codebase for platform-specific assumptions (path separators, `.cmd` binary resolution on Windows, `taskkill` vs SIGKILL process-tree teardown). Windows-verified; Linux/macOS CI matrix deferred to Phase 6. | **COMPLETE** |
+| **5.6** | Emergency-Stop Bus Integration: `queue:emergency-stop` EventBus handler wired in `bootstrap.ts` to invoke `terminalConnector.killAll()` and drain active browser sessions on halt. | **COMPLETE** |
 
 ### Total Project Test Count:
-**149 tests** pass successfully across **23 test files** inside the repository.
+**164 tests** pass successfully across **26 test files** inside the repository.
 
 ---
 
-## 🚫 Scope Exclusions (What Phases 1, 2, 3 & 4 DO NOT Include)
+## 🚫 Scope Exclusions (What Phases 1–5 DO NOT Include)
 
-Consistent with the original master Phase 1 & Phase 2 charter specifications, the following architectural elements are excluded:
+Consistent with the master charter specifications, the following architectural elements remain excluded:
 - **No Voice Interface**: No speech recognition or speech synthesis.
-- **No Browser Automation / Ad-Hoc Web Scraping**: No Chromium, Playwright, Puppeteer, or unmanaged HTTP scraping connectors (deferred to Phase 5).
-- **No Additional Agent Personas**: Only the `software-engineer` and `researcher` agents are present; review and QA agents are excluded.
+- **No Additional Agent Personas**: Only `software-engineer`, `researcher`, `code-reviewer`, `project-manager`, `browser-operator`, and `terminal-operator` agents are present.
 - **No External/Dynamic Vector Databases**: ChromaDB, Pinecone, or Milvus are excluded; memory relies strictly on a local-first SQLite file vector database (type `'sqlite-json-cosine'`).
-- **No Multi-Agent Swarm Communications**: Events and schedules run strictly in-process; Redis/NATS brokers are excluded.
+- **No Multi-Agent Swarm Communications via External Brokers**: Events and schedules run strictly in-process; Redis/NATS brokers are excluded.
 - **No Electron/GUI**: Operation is restricted strictly to terminal TTY command lines.
-- **No Cloud VMs / Linux Cross-Platform Verification**: Host machines run scripts directly on Windows; cross-platform CI matrix testing is deferred to Phase 5.
+- **No Linux/macOS CI Matrix**: Host machines run scripts directly on Windows; cross-platform CI matrix testing is deferred to Phase 6.
 
 ---
 
-## 🔮 Transition Notes (Phases 1-4)
+## 🔮 Transition Notes (Phases 1–5)
 
-A future developer picking up work after Phase 4 should review these technical design patterns locked in during Phase 1, Phase 2, Phase 3, and Phase 4:
+A future developer picking up work after Phase 5 should review these technical design patterns locked in during Phases 1–5:
 
 1. **Recursive Secrets Redaction**:
    The `redactSecrets` utility in `core/src/lib/redact.ts` traverses error traces and nested objects/arrays recursively. This is the primary mechanism to filter keys like `apiKey` or secrets patterns. Callers should apply this before logging or persisting parameters.
@@ -82,6 +87,14 @@ A future developer picking up work after Phase 4 should review these technical d
     Card writes are gated via `'kanban-write'` which only `'project-manager'` is allowed to write. Other agents request card changes strictly via message passing.
 13. **Code Reviewer Error Propagation (Phase 4 Note)**:
     `CodeReviewerAgent` was updated to propagate message-send routing exceptions (such as `MessageLoopError`) upwards during peer-to-peer review result notification, rather than catching and swallowing them in logs.
+14. **Browser Risk-Tier Gating (Phase 5 Note)**:
+    `BrowserConnector` classifies actions into three tiers: `browser-read` (auto-approved for `browser-operator`), `browser-write` (standard y/N prompt), and `browser-admin` (high-friction). Local and `file://` URLs are always escalated to `browser-admin` regardless of action type, requiring explicit operator confirmation.
+15. **Terminal allowlist pre-approval (Phase 5 Note)**:
+    `TerminalConnector` evaluates spawned commands against the `JARVIS_TERMINAL_ALLOWLIST` config (comma-separated, default: `echo,ls,pwd,cat,git,npm,npx`). Allowlisted commands are pre-approved in the Gatekeeper without user prompting. All other commands route to a high-friction confirmation step.
+16. **Windows Process-Tree Kill (Phase 5 Note)**:
+    On Windows, child processes spawned via `child_process.spawn` do not propagate `SIGKILL` to subprocess trees. `TerminalConnector.killAll()` uses `taskkill /pid <pid> /f /t` to recursively terminate the entire process subtree. On Unix, `SIGKILL` is sent directly. The exit handler — not `killAll()` — is responsible for removing entries from `activeProcesses`; `killAll()` only marks them as killed.
+17. **Windows `.cmd` Binary Resolution (Phase 5 Note)**:
+    On Windows, Node.js `spawn` requires `.cmd` suffixes for binaries like `npm`, `npx`, `git`. `TerminalConnector` automatically appends `.cmd` when `process.platform === 'win32'` and the resolved command matches a known cross-platform binary.
 
 ---
 
@@ -90,15 +103,16 @@ A future developer picking up work after Phase 4 should review these technical d
 1. **Process-Wide Config Cache**: Configurations are cached process-wide inside `config.ts` after the first call. Tests or scripts updating environment variables mid-execution must call `clearConfigCache()` to reload settings.
 2. **Non-Interactive Stdin Limitations**: In background tasks or CI/CD pipelines, stdin cannot block for input. Gated filesystem writes and destructive git operations will default to `false` (denied) instantly in these environments.
 3. **Claude Request Timeout**: Request timeout limits on Anthropic Claude API connections are deferred until a production latency requirement arises (Phase 6).
-4. **Web-Fetch / Browser Automation Scope**: External web fetching and browser automation were explicitly omitted from `ResearcherAgent` in Phase 2 because no scoped, allowlisted web-fetch mechanism exists in `core/src` or `connectors/`. Creating an ad-hoc unscoped HTTP client would violate security principles; browser automation is deferred to Phase 5.
-5. **Windows-Only Verification**: The codebase was developed and verified on Windows. Cross-platform behaviors and CI compatibility on Linux and macOS are deferred to Phase 5.
-6. **Outcome Log Matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys, ensuring outcome logs remain decoupled from database write-locking triggers on the audit table.
+4. **Windows-Only Verification**: The codebase was developed and verified on Windows. Cross-platform behaviors and CI compatibility on Linux and macOS are deferred to Phase 6.
+5. **Outcome Log Matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys, ensuring outcome logs remain decoupled from database write-locking triggers on the audit table.
+6. **Terminal Secrets Redaction Coverage**: Stdout/stderr secrets redaction in `TerminalConnector` relies on the same regex shapes as `redactSecrets`. Advanced credential shapes or multi-line secrets spanning chunk boundaries may not be caught.
+7. **Browser Headless-Only**: `BrowserConnector` always runs Playwright in headless mode (configurable via `JARVIS_BROWSER_HEADLESS`). Non-headless (visible) browser automation is possible via config but not tested.
 
 ---
 
-## 🏁 Carry-Forward Item Resolution (Through Phase 4)
+## 🏁 Carry-Forward Item Resolution (Through Phase 5)
 
-The table below provides the authoritative final resolution status for all 7 carry-forward items and deferred technical debts from the master charter:
+The table below provides the authoritative final resolution status for all carry-forward items and deferred technical debts from the master charter:
 
 | Carry-Forward Item | Final Status | Resolution / Justification |
 | :--- | :--- | :--- |
@@ -107,10 +121,12 @@ The table below provides the authoritative final resolution status for all 7 car
 | **3. CI pipeline automation** | **RESOLVED** | GitHub Actions CI workflow added in Sub-task 2.6 (`.github/workflows/ci.yml`) running clean dependency install, typechecking (`npx tsc --noEmit`), and full Vitest suite (`npm test`). |
 | **4. Double-scheduleNext polling redundancy** | **RESOLVED** | Inspected in 2.1 and confirmed harmless (idempotent timeout re-arming in `agentRouter.ts`); retained as documented transition behavior. |
 | **5. Claude API connection timeout** | **STILL DEFERRED (Phase 6)** | Custom socket/request timeout limits on Anthropic Claude API connections deferred to Phase 6 production hardening. |
-| **6. Local model runtime (Ollama)** | **STILL DEFERRED (Phase 3+)** | Local LLM serving via Ollama deferred to Phase 3+ when offline model execution is prioritized. |
-| **7. Cross-platform verification (Linux/macOS)** | **STILL DEFERRED (Phase 5)** | Developed and tested on Windows; multi-OS CI matrix and cross-platform behavior testing deferred to Phase 5. |
-| **8. Linear-scan search complexity at scale** | **DEFERRED (Phase 4+)** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
-| **9. Secrets pattern matching regex gaps** | **DEFERRED (Phase 4+)** | Redaction scanner relies on basic regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
+| **6. Local model runtime (Ollama)** | **STILL DEFERRED (Phase 6)** | Local LLM serving via Ollama deferred to Phase 6 when offline model execution is prioritized. |
+| **7. Cross-platform verification (Linux/macOS)** | **STILL DEFERRED (Phase 6)** | Developed and tested on Windows; multi-OS CI matrix and cross-platform behavior testing deferred to Phase 6. |
+| **8. Linear-scan search complexity at scale** | **DEFERRED (Phase 6)** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
+| **9. Secrets pattern matching regex gaps** | **DEFERRED (Phase 6)** | Redaction scanner relies on basic regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
+| **10. Browser automation** | **RESOLVED (Phase 5)** | `BrowserConnector` and `BrowserOperatorAgent` implemented with full gated risk-tier taxonomy, local-URL blocking, and allowlist enforcement. |
+| **11. Terminal operator** | **RESOLVED (Phase 5)** | `TerminalConnector` and `TerminalOperatorAgent` implemented with path scoping, allowlist pre-approval, timeout, clean process-tree kill, and secrets redaction. |
 
 ---
 
@@ -119,31 +135,31 @@ The table below provides the authoritative final resolution status for all 7 car
 For each of the 7 assumptions (A1–A7) from the master charter, here is their alignment in the Phase 2 codebase:
 
 - **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Partially Consistent**. The TypeScript/Node.js orchestrator and agent runtime match this perfectly. However, the Python AI/ML worker stack has not been implemented or exercised yet, as Phase 1 & Phase 2 have no vision, embeddings, or local model serving requirements.
-- **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Untested (Windows-only)**. The codebase was developed and tested entirely on Windows. Cross-platform behaviors and compatibility on macOS and Linux are deferred to Phase 5.
+- **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Untested (Windows-only)**. The codebase was developed and tested entirely on Windows. Cross-platform behaviors and compatibility on macOS and Linux are deferred to Phase 6.
 - **A3 — Cloud model provider: Anthropic Claude API as primary, with a pluggable model-router so other providers (OpenAI, local Ollama) can be swapped in without redesign**: **Consistent**. The primary cloud connector routes via the Anthropic Claude API. The pluggable structure is enforced by `ModelRouter.register()`, which decouples model invocation from connector implementations, allowing alternative connectors to be added without modifying the router schema.
-- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred to Phase 4+)**. A local model runtime using Ollama was not implemented or integrated in Phase 3.
-- **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Consistent**. Phase 2 implements a TTY-interactive CLI context, background polling daemon orchestration, and structured JSON logs. Voice processing and computer-control functions are entirely absent.
+- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred to Phase 6)**. A local model runtime using Ollama was not implemented or integrated in Phases 1–5.
+- **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Partially Consistent**. Phase 5 introduces gated computer-control (browser and terminal operators), marking the first departure from pure CLI; voice is still absent.
 - **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory**: **Consistent**. Relational task queue scheduling, heartbeats, and audit transactions are stored in SQLite. Phase 3 successfully delivered a local-first custom SQLite vector store (`sqlite-json-cosine`) linked to the main DB.
 - **A7 — You are a developer comfortable running Node/Python locally and reading code**: **Consistent**. The build processes, Vitest verification executions, and GitHub Actions CI workflow conform to local Node.js environment capabilities.
 
 ---
 
-## 📊 Self-Review Scorecard (Phases 1-4 Complete)
+## 📊 Self-Review Scorecard (Phases 1–5 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |
-| **Architecture** | **PASS** | Decouples task queues, permission gates, model router adapters, filesystem/git connectors, and specialized worker agents effectively. |
+| **Architecture** | **PASS** | Decouples task queues, permission gates, model router adapters, filesystem/git/browser/terminal connectors, and specialized worker agents effectively. |
 | **Code Quality** | **PASS** | Employs strict TypeScript annotations across all components; compiles with zero warnings or errors (`npx tsc --noEmit`). |
-| **Security** | **PASS** | Prevents log secrets leaks via recursive sanitization, guarantees audit trails are immutable using SQLite triggers, enforces project-root path scoping, and defaults to deny on timeout or non-interactive TTYs. |
+| **Security** | **PASS** | Prevents log secrets leaks via recursive sanitization, guarantees audit trails are immutable using SQLite triggers, enforces project-root path scoping, blocks local-URL browser access, pre-approves only safe terminal commands, and defaults to deny on timeout or non-interactive TTYs. |
 | **Performance** | **PASS** | Employs WAL logging on file-backed databases and caches configurations to minimize connection latencies. |
 | **Maintainability** | **PASS** | Standardizes command execution and queue transactions inside a bootloader-allocated context runtime. |
 | **Scalability** | **PASS** | Abstract definitions for model routing and task heartbeats can scale to multi-agent IPC structures. |
 | **Readability** | **PASS** | Employs clear formatting, explicit interfaces, and descriptive comments. |
-| **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions, correcting early vector store labels to `'sqlite-json-cosine'`. |
+| **Naming** | **PASS** | Strictly adheres to camelCase variable naming and snake_case database schema definitions. |
 | **Documentation** | **PASS** | Includes complete system architectures, boundaries, setup guides, limitations, carry-forward resolutions, transitional developer notes, and dynamic agent memory examples. |
-| **Testing** | **PASS** | The test suite reaches **149 tests across 23 files**, covering the core queue, gatekeepers, filesystem, git, memory manager rollbacks, cross-agent integration, file-restart persistence, and swarm message loop routing. |
-| **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via monotonic `sequence_id`, same-millisecond FIFO evictions are rowid-tiebroken, and cross-session restarts are verified. |
+| **Testing** | **PASS** | The test suite reaches **164 tests across 26 files**, covering the core queue, gatekeepers, filesystem, git, memory manager rollbacks, cross-agent integration, file-restart persistence, swarm message loop routing, browser connector gating, terminal connector kill/timeout/redaction, and Phase 5 delegation safety. |
+| **Edge Cases** | **PASS** | Same-millisecond synchronous insertions are deterministically resolved via monotonic `sequence_id`, same-millisecond FIFO evictions are rowid-tiebroken, cross-session restarts are verified, and process-tree teardown on Windows is handled via `taskkill`. |
 | **Best Practices** | **PASS** | Leverages configuration singletons, custom database closures, proper process exit codes, and automated CI pipelines. |
 | **Future Compatibility** | **PASS** | Keeps interfaces generic to enable pluggable model connectivities and memory structures in future phases. |
-| **Dependency Management** | **PASS** | Integrates only highly audited, lightweight packages (`better-sqlite3`, `pino`, `dotenv`, `@anthropic-ai/sdk`). |
+| **Dependency Management** | **PASS** | Integrates only highly audited, lightweight packages (`better-sqlite3`, `pino`, `dotenv`, `@anthropic-ai/sdk`, `playwright`). |
 | **Consistency w/ Project Standards** | **PASS** | Fully meets TypeScript, ESM, Vitest, and GitHub Actions CI pipeline automation standards. |

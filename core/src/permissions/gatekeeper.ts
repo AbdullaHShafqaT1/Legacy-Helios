@@ -2,6 +2,7 @@ import { Logger } from 'pino';
 import { AuditLog } from './auditLog.js';
 import { redactSecrets } from '../lib/redact.js';
 import { TimeoutError, createHighFrictionApprovalPrompt } from '../lib/prompt.js';
+import { loadConfig } from '../lib/config.js';
 import {
   GuardedAction,
   AgentPolicy,
@@ -65,23 +66,38 @@ export class PermissionGatekeeper {
    * @returns Resolves to a PermissionDecision holding the granted status and audit correlation ID.
    */
   async authorize(request: PermissionRequest): Promise<PermissionDecision> {
+    const config = loadConfig(false);
+    let action = request.action;
+
+    // Check for browser URL restrictions
+    if (action === 'browser-read' || action === 'browser-write') {
+      const urlParam = request.params.url as string;
+      if (urlParam) {
+        const isLocal = isLocalOrFileUrl(urlParam);
+        const isAllowed = isUrlAllowlisted(urlParam, config.browserLocalAllowlist);
+        if (isLocal && !isAllowed) {
+          action = 'browser-admin'; // force higher risk category that is blocked by default
+        }
+      }
+    }
+
     const policy = this.policyMap[request.actor];
 
     // STEP 1: Role-based check
     // An agent with no policy entry or attempting an action outside its allowedActions must be rejected immediately.
-    const isRoleAllowed = Boolean(policy && policy.allowedActions.includes(request.action as GuardedAction));
+    const isRoleAllowed = Boolean(policy && policy.allowedActions.includes(action as GuardedAction));
 
     if (!isRoleAllowed) {
       const correlationId = this.auditLog.recordDecision({
         actor: request.actor,
-        action: request.action,
+        action: action,
         params: request.params,
         approvalStatus: 'denied',
         approver: 'system',
       });
 
       this.logger.warn(
-        { correlationId, actor: request.actor, action: request.action, denialReason: 'not-permitted' },
+        { correlationId, actor: request.actor, action: action, denialReason: 'not-permitted' },
         'Permission request DENIED: Actor is not permitted to perform this action category.'
       );
 
@@ -95,21 +111,32 @@ export class PermissionGatekeeper {
 
     // STEP 2: Approval check
     // Step 2a: Policy Pre-approval (auto-approve non-destructive passive read actions)
-    const isAutoApproved = Boolean(
-      policy.autoApproveActions && policy.autoApproveActions.includes(request.action as GuardedAction)
+    let isAutoApproved = Boolean(
+      policy.autoApproveActions && policy.autoApproveActions.includes(action as GuardedAction)
     );
+
+    // Terminal command allow-list pre-approval logic
+    if (action === 'terminal-run') {
+      const command = request.params.command as string;
+      const isCmdAllowed = config.terminalAllowlist.some(cmd => {
+        return command === cmd || command.startsWith(cmd + ' ');
+      });
+      if (isCmdAllowed) {
+        isAutoApproved = true;
+      }
+    }
 
     if (isAutoApproved) {
       const correlationId = this.auditLog.recordDecision({
         actor: request.actor,
-        action: request.action,
+        action: action,
         params: request.params,
         approvalStatus: 'granted',
         approver: 'policy',
       });
 
       this.logger.info(
-        { correlationId, actor: request.actor, action: request.action, approver: 'policy' },
+        { correlationId, actor: request.actor, action: action, approver: 'policy' },
         'Permission request GRANTED via policy pre-approval.'
       );
 
@@ -121,14 +148,17 @@ export class PermissionGatekeeper {
     }
 
     // Step 2b: Interactive / High-Friction Prompt check
-    const isHighFriction = ['git-force-push', 'git-history-rewrite', 'destructive'].includes(request.action);
+    const isHighFriction = ['git-force-push', 'git-history-rewrite', 'destructive', 'terminal-run'].includes(action);
     const promptToUse = isHighFriction ? this.highFrictionPrompt : this.approvalPrompt;
 
     let approved = false;
     let denialReason: 'explicit' | 'timeout' | 'error' | undefined;
 
     try {
-      approved = await promptToUse(request);
+      approved = await promptToUse({
+        ...request,
+        action,
+      });
       if (!approved) {
         denialReason = 'explicit';
       }
@@ -140,7 +170,7 @@ export class PermissionGatekeeper {
         // Redact error trace arguments before passing to warn log
         const redactedError = redactSecrets(error);
         this.logger.warn(
-          { error: redactedError, requestActor: request.actor, requestAction: request.action },
+          { error: redactedError, requestActor: request.actor, requestAction: action },
           'Approval prompt threw an error. Defaulting to deny-by-default.'
         );
         approved = false;
@@ -150,7 +180,7 @@ export class PermissionGatekeeper {
 
     const correlationId = this.auditLog.recordDecision({
       actor: request.actor,
-      action: request.action,
+      action: action,
       params: request.params,
       approvalStatus: approved ? 'granted' : 'denied',
       approver: 'user',
@@ -158,12 +188,12 @@ export class PermissionGatekeeper {
 
     if (approved) {
       this.logger.info(
-        { correlationId, actor: request.actor, action: request.action, path: request.params.path },
+        { correlationId, actor: request.actor, action: action, path: request.params.path },
         'Permission request GRANTED.'
       );
     } else {
       this.logger.warn(
-        { correlationId, actor: request.actor, action: request.action, path: request.params.path, denialReason },
+        { correlationId, actor: request.actor, action: action, path: request.params.path, denialReason },
         'Permission request DENIED.'
       );
     }
@@ -174,5 +204,50 @@ export class PermissionGatekeeper {
       denialReason,
       approver: 'user',
     };
+  }
+}
+
+function isLocalOrFileUrl(urlString: string): boolean {
+  if (!urlString) return false;
+  const trimmed = urlString.trim().toLowerCase();
+  if (trimmed.startsWith('file:')) {
+    return true;
+  }
+  try {
+    const url = new URL(urlString);
+    if (url.protocol === 'file:') return true;
+    const hostname = url.hostname;
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname === '0.0.0.0'
+    ) {
+      return true;
+    }
+    const parts = hostname.split('.');
+    if (parts.length === 4) {
+      const p1 = parseInt(parts[0], 10);
+      const p2 = parseInt(parts[1], 10);
+      if (p1 === 10) return true;
+      if (p1 === 192 && p2 === 168) return true;
+      if (p1 === 172 && p2 >= 16 && p2 <= 31) return true;
+      if (p1 === 127) return true;
+    }
+  } catch {
+    if (trimmed.includes('localhost') || trimmed.includes('127.0.0.1') || trimmed.includes('[::1]')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isUrlAllowlisted(urlString: string, allowlist: string[]): boolean {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname;
+    return allowlist.includes(hostname) || allowlist.includes(url.host);
+  } catch {
+    return false;
   }
 }
