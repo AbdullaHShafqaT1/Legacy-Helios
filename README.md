@@ -1,4 +1,4 @@
-# Legacy's Helios - Jarvis OS Kernel (Phase 1, Phase 2 & Phase 3 Complete)
+# Legacy's Helios - Jarvis OS Kernel (Phases 1–5 Complete)
 
 > **A modular, autonomous AI Operating System designed for software engineering, automation, scientific research, and deep productivity.**
 
@@ -13,8 +13,8 @@
 
 ## 👁️ Project Scope & Boundaries
 
-### What Jarvis Phase 1, Phase 2 & Phase 3 IS:
-**Jarvis Phase 1, Phase 2 & Phase 3** establish the core operational kernel, permission security layer, local filesystem/git connectors, semantic memory retention, and specialized worker agents:
+### What Jarvis Phases 1–5 ARE:
+**Jarvis Phases 1–5** establish the core operational kernel, permission security layer, local filesystem/git connectors, semantic memory retention, specialized worker agents, browser automation, and terminal operation:
 1. **The Task Queue (`TaskQueue`)**: A relational DAG scheduler running on SQLite (utilizing `better-sqlite3`) with WAL journaling, immutable audit logs via database triggers, priority sorting, retry management, dependency gating, and deterministic same-millisecond FIFO task ordering via monotonic `sequence_id`.
 2. **The Model Router (`ModelRouter`)**: A routing facade dispatcher with exponential backoff retries connecting to the Anthropic messages API, supporting `"coding"`, `"reasoning"`, and `"research"` task types.
 3. **The Worker Agents**:
@@ -24,17 +24,18 @@
 5. **The Connectors**:
    - **`FilesystemConnector`**: Provides project-root scoped read/write/delete access (`listDir`, `readFile`, `writeFile`, `deleteFile`) with strict path-traversal protection and audit logging.
    - **`GitConnector`**: Provides project-root scoped Git operations (`status`, `log`, `diff`, `commit`, `push`, `forcePush`, `resetHard`) with error classification and high-friction confirmation gating for destructive operations.
+   - **`BrowserConnector`**: Playwright-backed headless browser automation with risk-tiered gating (`browser-read` / `browser-write` / `browser-admin`), local-URL blocking, per-domain allowlist, and full audit logging.
+   - **`TerminalConnector`**: Path-scoped shell command execution with configurable timeout, allowlist pre-approval for safe commands, high-friction gating for unlisted commands, process-tree kill on emergency stop, and stdout/stderr secrets redaction.
 6. **The Daemon & CLI**: An asynchronous poll loop orchestrator daemon and a 5-command CLI interface (`submit`, `status`, `logs`, `stop`, `help`).
 7. **Semantic Memory Manager (`MemoryManager`)**: A local-first semantic memory retrieval pipeline using `SqliteVectorStore` (type `'sqlite-json-cosine'`) to store JSON-serialized embedding float arrays, supporting context recall (via character n-gram TF-IDF embeddings) and automated write integrations on task completion for both Software Engineer and Researcher agents, limited by FIFO eviction policy.
 
-### What Jarvis Phase 1, Phase 2 & Phase 3 is NOT (Deferred to Later Phases):
+### What Jarvis Phases 1–5 are NOT (Deferred to Phase 6):
 - **No Voice Interface**: Audio processing is deferred.
-- **No Browser Automation / External Web Fetching**: Web browsing agents and ad-hoc HTTP scraping are deferred to Phase 5.
-- **No Additional Agent Personas**: Review and QA agent personas are deferred.
+- **No Additional Agent Personas**: Review and QA agent personas beyond the current six are deferred.
 - **No External / Dynamic Cloud Vector Database**: ChromaDB, Pinecone, or Milvus are excluded; memory relies strictly on a local-first SQLite file vector database (type `'sqlite-json-cosine'`).
 - **No Cross-Process Message Brokers**: Event routing is strictly in-process; Redis/NATS pub-sub is deferred.
 - **No Electron/Graphical GUI**: The system runs strictly in TTY terminal environments.
-- **No Cloud Deployment / Linux Cross-Platform Verification**: Developed and verified locally on Windows; multi-OS CI matrices and cloud VM orchestrations are deferred to Phase 5.
+- **No Linux/macOS CI Matrix**: Developed and verified locally on Windows; multi-OS CI matrices and cloud VM orchestrations are deferred to Phase 6.
 
 ---
 
@@ -67,6 +68,10 @@
    - **`JARVIS_VECTOR_STORE_TYPE`**: Vector store implementation type (default: `sqlite-json-cosine`).
    - **`JARVIS_EMBEDDING_DIMENSIONS`**: Dimensions for local n-gram embedding vectors (default: `384`).
    - **`JARVIS_MEMORY_MAX_ENTRIES`**: Memory manager maximum retention capacity limit (default: `1000`).
+   - **`JARVIS_BROWSER_HEADLESS`**: Run browser automation in headless mode (default: `true`).
+   - **`JARVIS_BROWSER_LOCAL_ALLOWLIST`**: Comma-separated local hostnames the browser may access without admin gating (default: `localhost,127.0.0.1`).
+   - **`JARVIS_TERMINAL_ALLOWLIST`**: Comma-separated commands pre-approved for terminal execution without prompting (default: `echo,ls,pwd,cat,git,npm,npx`).
+   - **`JARVIS_TERMINAL_TIMEOUT_MS`**: Maximum execution time in milliseconds for a terminal command before forced kill (default: `30000`).
 
 ---
 
@@ -158,7 +163,11 @@ export type GuardedAction =
   | 'git-history-rewrite'
   | 'destructive'
   | 'memory-read'
-  | 'memory-write';
+  | 'memory-write'
+  | 'browser-read'
+  | 'browser-write'
+  | 'browser-admin'
+  | 'terminal-run';
 ```
 
 ### 2. Role-Based PolicyMap Definitions (`DEFAULT_AGENT_POLICIES`)
@@ -309,7 +318,7 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **149 tests across 23 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, and cross-agent shared project recalls.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **164 tests across 26 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, and Phase 5 delegation safety.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:
@@ -340,4 +349,6 @@ Before pushing commits or submitting pull requests, developers must run the exac
 4. **Outcome Log Matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys. This design ensures outcome logs remain decoupled from database write-locking triggers on the audit table.
 5. **Linting and Formatters**: Code checks are performed strictly via the TypeScript compiler (`npx tsc --noEmit`). Project-wide ESLint and Prettier configurations are deferred.
 6. **Claude Request Timeout**: Request timeout limits on Claude API connections are deferred until a production latency requirement arises.
-7. **Local-Only Researcher Scope**: The Researcher Agent operates strictly on local filesystem context via `FilesystemConnector`; external web browsing or HTTP fetching is deferred to Phase 5.
+7. **Local-Only Researcher Scope**: The Researcher Agent operates strictly on local filesystem context via `FilesystemConnector`; external web browsing or HTTP fetching is not performed by the Researcher (use `BrowserOperatorAgent` instead).
+8. **Windows Process-Tree Kill**: On Windows, `TerminalConnector.killAll()` uses `taskkill /pid <pid> /f /t` to terminate subprocess trees. On Unix, `SIGKILL` is used. Exit handlers remove entries from `activeProcesses` after termination — `killAll()` only marks them as killed.
+9. **Browser Headless Mode**: `BrowserConnector` operates in headless mode by default (`JARVIS_BROWSER_HEADLESS=true`). Non-headless operation is configurable but untested.
