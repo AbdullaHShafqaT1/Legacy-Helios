@@ -63,4 +63,24 @@ describe('Scheduler test', () => {
     db.close();
     fs.unlinkSync(dbPath);
   });
+
+  it('should throw an error if scheduleExpression is malformed', () => {
+    const dbPath = 'memory-store/scheduler-test-malformed.db';
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    
+    const db = openDb(dbPath);
+    const queue = new TaskQueue(db, logger);
+
+    expect(() => {
+      queue.scheduleTask({
+        id: 'test-cron-invalid',
+        description: 'Invalid Cron',
+        scheduleExpression: 'invalid-cron-string',
+        missedRunPolicy: 'skip'
+      });
+    }).toThrow('Invalid cron expression');
+
+    db.close();
+    fs.unlinkSync(dbPath);
+  });
 });

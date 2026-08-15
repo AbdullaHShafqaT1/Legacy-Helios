@@ -278,4 +278,62 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
 
     orchestrator.stop();
   });
+
+  it('exercises the full Unattended Approval Queue cycle (request -> pending -> approve -> resume)', async () => {
+    // 1. Enable unattended mode
+    process.env.JARVIS_UNATTENDED = 'true';
+    clearConfigCache();
+
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'Output for unattended' }],
+    });
+    approvalPromptMock.mockResolvedValue(true); // Should not be called anyway for unattended
+
+    const targetPath = path.join(tempDir, 'unattended_output.txt');
+    const task = queue.enqueue({
+      description: 'Write file under unattended mode',
+      fileContext: { targetPath },
+      maxRetries: 0,
+    });
+
+    orchestrator.start();
+
+    // 2. Wait for first attempt which should transition task to pending
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    let updatedTask = queue.getById(task.id);
+    expect(updatedTask?.status).toBe('pending');
+    expect(updatedTask?.retries).toBe(0); // Should not increment retries when paused for approval
+
+    // Check Audit Log for the pending-approval decision and the pending_approvals table
+    const logs1 = auditLog.recent();
+    const decisionRow1 = logs1.find(r => r.event_type === 'decision' && r.action === 'file-write');
+    expect(decisionRow1).toBeDefined();
+    expect(decisionRow1?.approval_status).toBe('denied'); // Temporarily denied to pause execution
+    
+    // Check pending_approvals table
+    const pendingRows = db.prepare(`SELECT * FROM pending_approvals WHERE task_id = ? AND status = 'pending'`).all(task.id);
+    expect(pendingRows.length).toBe(1);
+
+    // 3. Approve via DB (simulate CLI 'jarvis approve')
+    db.prepare(`UPDATE pending_approvals SET status = 'granted', updated_at = ? WHERE task_id = ?`)
+      .run(new Date().toISOString(), task.id);
+
+    // 4. Wait for next orchestrator tick to pick it up and resume
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    updatedTask = queue.getById(task.id);
+    expect(updatedTask?.status).toBe('completed');
+    expect(fs.existsSync(targetPath)).toBe(true);
+
+    // Check Audit Log for the final granted decision
+    const logs2 = auditLog.recent();
+    // The most recent file-write decision should now be granted by user
+    const decisionRow2 = logs2.find(r => r.event_type === 'decision' && r.action === 'file-write' && r.approval_status === 'granted');
+    expect(decisionRow2).toBeDefined();
+    expect(decisionRow2?.approver).toBe('user');
+
+    delete process.env.JARVIS_UNATTENDED;
+    clearConfigCache();
+  });
 });

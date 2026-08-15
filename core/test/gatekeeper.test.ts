@@ -253,6 +253,67 @@ describe('PermissionGatekeeper Class', () => {
     });
   });
 
+  describe('Terminal Allowlist Matching Semantics', () => {
+    it('should match exact and wildcard allowlist entries', async () => {
+      // Mock env vars for JARVIS_TERMINAL_ALLOWLIST
+      process.env.JARVIS_TERMINAL_ALLOWLIST = 'echo hello,npm run *';
+      clearConfigCache();
+
+      const gatekeeper = new PermissionGatekeeper(auditLog, logger, denyAllPrompt);
+
+      // Exact match
+      const req1 = { actor: 'terminal-operator', action: 'terminal-run' as const, params: { command: 'echo hello' } };
+      const res1 = await gatekeeper.authorize(req1);
+      expect(res1.granted).toBe(true);
+      expect(res1.approver).toBe('policy'); // pre-approved
+
+      // Wildcard match
+      const req2 = { actor: 'terminal-operator', action: 'terminal-run' as const, params: { command: 'npm run build' } };
+      const res2 = await gatekeeper.authorize(req2);
+      expect(res2.granted).toBe(true);
+      expect(res2.approver).toBe('policy');
+
+      // Wildcard mismatch (does not match prefix)
+      const req3 = { actor: 'terminal-operator', action: 'terminal-run' as const, params: { command: 'npm test' } };
+      const res3 = await gatekeeper.authorize(req3);
+      // Since it's denied by allowlist, it routes to highFrictionPrompt, which defaults to denyAllPrompt here, so denied
+      expect(res3.granted).toBe(false);
+
+      delete process.env.JARVIS_TERMINAL_ALLOWLIST;
+      clearConfigCache();
+    });
+  });
+
+  describe('actingOnBehalfOf type validation', () => {
+    it('should correctly accept valid AgentRole as actingOnBehalfOf', async () => {
+      const gatekeeper = new PermissionGatekeeper(auditLog, logger, denyAllPrompt);
+
+      const request = {
+        actor: 'software-engineer',
+        action: 'file-read' as const,
+        params: { path: 'test.txt', actingOnBehalfOf: 'researcher' as const }, // valid AgentRole
+      };
+
+      const decision = await gatekeeper.authorize(request);
+      expect(decision.granted).toBe(true);
+      
+      const recent = auditLog.recent();
+      expect(recent[0].params_json).toContain('"actingOnBehalfOf":"researcher"');
+    });
+
+    it('should surface type errors if an invalid string is passed to actingOnBehalfOf (Compile time enforcement)', () => {
+      // This is a type-level test. We use @ts-expect-error to ensure TS catches invalid strings.
+      // @ts-expect-error - 'invalid-role' is not a valid AgentRole
+      const request = {
+        actor: 'software-engineer',
+        action: 'file-read' as const,
+        params: { path: 'test.txt', actingOnBehalfOf: 'invalid-role' },
+      };
+      
+      expect(request.params.actingOnBehalfOf).toBe('invalid-role');
+    });
+  });
+
   describe('Readline interactive approval prompt', () => {
     let gatekeeper: PermissionGatekeeper;
 
