@@ -5,6 +5,7 @@ import { TaskQueue } from './queue/index.js';
 import { AgentRouter } from './router/agentRouter.js';
 import { JarvisEventBus } from './events/bus.js';
 import { toAgentInput } from '../../agents/shared/Agent.js';
+import { executionContext } from './lib/context.js';
 
 export interface OrchestratorOptions {
   pollIntervalMs: number;
@@ -120,7 +121,10 @@ export class Orchestrator {
     this.inFlight = true;
 
     try {
-      // 3. Scan and recover any stale tasks
+      // Evaluate scheduled tasks
+      this.queue.evaluateScheduledTasks();
+
+      // Scan and recover any stale tasks
       this.queue.recoverStaleTasks(this.options.staleTaskTimeoutMs);
 
       // 4 & 5. Attempt claiming the next pending task using AgentRouter to resolve target agent dynamically
@@ -153,19 +157,27 @@ export class Orchestrator {
 
       try {
         const agentInput = toAgentInput(task);
-        const result = await agent.process(agentInput);
+        
+        // Wrap execution in AsyncLocalStorage
+        await executionContext.run({ taskId: task.id }, async () => {
+          const result = await agent.process(agentInput);
 
-        if (result.status === 'completed') {
-          this.queue.complete(task.id, result);
-          this.eventBus.emit('task:completed', { taskId: task.id });
-        } else {
-          const failRes = this.queue.fail(task.id, result.error ?? result.explanation);
-          this.eventBus.emit('task:failed', {
-            taskId: task.id,
-            error: result.error ?? result.explanation,
-            willRetry: failRes.willRetry,
-          });
-        }
+          if (result.status === 'completed') {
+            this.queue.complete(task.id, result);
+            this.eventBus.emit('task:completed', { taskId: task.id });
+          } else if (result.status === 'pending-approval') {
+            this.queue.requeue(task.id, 'Paused for Unattended Approval.');
+            this.logger.info({ taskId: task.id }, 'Task paused for Unattended Approval.');
+            this.eventBus.emit('task:paused', { taskId: task.id });
+          } else {
+            const failRes = this.queue.fail(task.id, result.error ?? result.explanation);
+            this.eventBus.emit('task:failed', {
+              taskId: task.id,
+              error: result.error ?? result.explanation,
+              willRetry: failRes.willRetry,
+            });
+          }
+        });
       } catch (err: any) {
         // Contain exceptions thrown by the agent process
         const errMsg = err?.message || String(err);

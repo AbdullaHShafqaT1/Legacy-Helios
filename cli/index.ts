@@ -33,6 +33,12 @@ Commands:
   stop
     Triggers an emergency halt. Running orchestrator will stop claiming tasks.
 
+  approve <taskId>
+    Approves pending Unattended Approval requests for the specified task ID.
+
+  briefing
+    Generates an LLM summary of yesterday's completed tasks.
+
   help
     Prints this help message.
 `);
@@ -71,7 +77,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -210,6 +216,57 @@ async function run(): Promise<void> {
       console.log(`Emergency stop signal written to: ${stopSignalPath}`);
       console.log('The running orchestrator daemon will stop claiming new tasks within one poll cycle.');
       console.log('To resume processing, please delete the signal file at the path above.');
+    } else if (command === 'approve') {
+      const taskId = positional[0]?.trim();
+      if (!taskId) {
+        throw new Error('Task ID is required for approve command.');
+      }
+      const now = new Date().toISOString();
+      const stmt = ctx.db.prepare(`
+        UPDATE pending_approvals 
+        SET status = 'granted', updated_at = ?
+        WHERE task_id = ? AND status = 'pending'
+      `);
+      const result = stmt.run(now, taskId);
+      if (result.changes > 0) {
+        console.log(`Approved pending requests for task: ${taskId}`);
+      } else {
+        console.log(`No pending approvals found for task: ${taskId}`);
+      }
+    } else if (command === 'briefing') {
+      const { ClaudeConnector } = await import('../../connectors/claude-api/ClaudeConnector.js');
+      const claude = new ClaudeConnector({
+        apiKey: ctx.config.anthropicApiKey!,
+        model: ctx.config.model,
+        logger: ctx.logger,
+      });
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString();
+
+      const tasks = ctx.db.prepare(`
+        SELECT id, description, result_json FROM tasks
+        WHERE status = 'completed' AND updated_at >= ?
+      `).all(yesterdayStr) as any[];
+
+      if (tasks.length === 0) {
+        console.log('No tasks completed in the last 24 hours.');
+        return;
+      }
+
+      console.log(`Found ${tasks.length} completed tasks. Generating briefing...`);
+      const prompt = `Summarize the following completed tasks from the last 24 hours into a concise briefing. Highlight key achievements.\n\n` + 
+                     tasks.map(t => `- Task ${t.id}: ${t.description}\n  Result: ${t.result_json?.substring(0, 500)}`).join('\n');
+                     
+      const res = await claude.invoke({
+        taskId: 'briefing',
+        description: prompt,
+      });
+      
+      console.log('\n--- DAILY BRIEFING ---\n');
+      console.log(res.text);
+      console.log('\n----------------------\n');
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);

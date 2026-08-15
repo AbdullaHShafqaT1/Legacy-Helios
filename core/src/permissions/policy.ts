@@ -14,6 +14,15 @@ export type GuardedAction =
   | 'browser-admin'
   | 'terminal-run';
 
+export type AgentRole =
+  | 'software-engineer'
+  | 'researcher'
+  | 'code-reviewer'
+  | 'project-manager'
+  | 'browser-operator'
+  | 'terminal-operator'
+  | 'system'; // 'system' is used as an approver sometimes
+
 export interface AgentPolicy {
   allowedActions: (GuardedAction | string)[];
   autoApproveActions?: (GuardedAction | string)[];

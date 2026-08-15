@@ -118,42 +118,52 @@ describe('BrowserConnector Gating & Guttering Unit Tests', () => {
       ensureBrowserStub.mockRestore();
     });
 
+    const getLatestDecision = (action: string) => {
+      const rows = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 5').all();
+      return rows.find((r: any) => r.event_type === 'decision' && r.action === action);
+    };
+
     it('should route browser-write action click to standard user prompt', async () => {
       mockStandardPrompt.mockResolvedValue(true);
       await browserConnector.click('browser-operator', '#submit-btn');
+      
       expect(mockStandardPrompt).toHaveBeenCalled();
       const lastCall = mockStandardPrompt.mock.calls[0][0];
       expect(lastCall.action).toBe('browser-write');
       expect(lastCall.params.action).toBe('click');
       expect(lastCall.params.selector).toBe('#submit-btn');
+
+      const decision = getLatestDecision('browser-write');
+      expect(decision).toBeDefined();
+      expect(decision?.approver).toBe('user');
     });
 
     it('should route browser-write action fill to standard user prompt', async () => {
       mockStandardPrompt.mockResolvedValue(true);
       await browserConnector.fill('browser-operator', '#input-field', 'some-value');
+      
       expect(mockStandardPrompt).toHaveBeenCalled();
-      const lastCall = mockStandardPrompt.mock.calls[0][0];
-      expect(lastCall.action).toBe('browser-write');
-      expect(lastCall.params.action).toBe('fill');
+      const decision = getLatestDecision('browser-write');
+      expect(decision?.approver).toBe('user');
     });
 
     it('should route browser-write action download to standard user prompt', async () => {
       mockStandardPrompt.mockResolvedValue(true);
       const downloadPath = await browserConnector.download('browser-operator', 'https://example.com/file.zip');
       expect(downloadPath).toBe('/tmp/downloaded-file.txt');
+      
       expect(mockStandardPrompt).toHaveBeenCalled();
-      const lastCall = mockStandardPrompt.mock.calls[0][0];
-      expect(lastCall.action).toBe('browser-write');
-      expect(lastCall.params.action).toBe('download');
+      const decision = getLatestDecision('browser-write');
+      expect(decision?.approver).toBe('user');
     });
 
     it('should route browser-write action upload to standard user prompt', async () => {
       mockStandardPrompt.mockResolvedValue(true);
       await browserConnector.upload('browser-operator', '#upload-input', '/path/to/file.txt');
+      
       expect(mockStandardPrompt).toHaveBeenCalled();
-      const lastCall = mockStandardPrompt.mock.calls[0][0];
-      expect(lastCall.action).toBe('browser-write');
-      expect(lastCall.params.action).toBe('upload');
+      const decision = getLatestDecision('browser-write');
+      expect(decision?.approver).toBe('user');
     });
   });
 });

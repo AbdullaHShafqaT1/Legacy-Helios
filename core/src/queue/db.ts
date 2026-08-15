@@ -153,6 +153,32 @@ export function openDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_kanban_columns_board_id ON kanban_columns (board_id);
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_column_id ON kanban_cards (column_id);
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_task_id ON kanban_cards (task_id);
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      schedule_expression TEXT NOT NULL,
+      missed_run_policy TEXT NOT NULL CHECK (missed_run_policy IN ('skip', 'catch-up')),
+      last_run_at TEXT,
+      next_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run_at ON scheduled_tasks (next_run_at);
+
+    CREATE TABLE IF NOT EXISTS pending_approvals (
+      id TEXT PRIMARY KEY,
+      correlation_id TEXT NOT NULL UNIQUE,
+      task_id TEXT NOT NULL,
+      request_payload_json TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'granted', 'denied')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_task_id ON pending_approvals (task_id);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals (status);
   `;
 
   // Run migration check if table 'tasks' already exists before executing schemaDdl

@@ -96,6 +96,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     apiKey: config.anthropicApiKey!,
     model: config.model,
     maxRetries: config.maxRetries,
+    timeoutMs: config.claudeTimeoutMs,
     logger: createLogger('claude-connector', config.logLevel),
   });
   modelRouter.register(claudeConnector);
@@ -223,10 +224,16 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     projectManager.handleTaskCompleted(data).catch(err => {
       logger.error({ err }, 'Failed handling task:completed event.');
     });
+    browserConnector.close(data.taskId).catch(err => {
+      logger.error({ err }, 'Failed to close browser session for completed task.');
+    });
   });
   eventBus.on('task:failed', (data) => {
     projectManager.handleTaskFailed(data).catch(err => {
       logger.error({ err }, 'Failed handling task:failed event.');
+    });
+    browserConnector.close(data.taskId).catch(err => {
+      logger.error({ err }, 'Failed to close browser session for failed task.');
     });
   });
 

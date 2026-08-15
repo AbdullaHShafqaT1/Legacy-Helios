@@ -105,4 +105,31 @@ export class AuditLog {
       LIMIT ?
     `).all(limit) as AuditLogRow[];
   }
+
+  /**
+   * Records a pending approval request for the Unattended Approval Queue.
+   */
+  recordPendingApproval(correlationId: string, taskId: string, payload: unknown): void {
+    const now = new Date().toISOString();
+    const payloadStr = JSON.stringify(payload);
+    const insertStmt = this.db.prepare(`
+      INSERT INTO pending_approvals (id, correlation_id, task_id, request_payload_json, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?)
+    `);
+    insertStmt.run(crypto.randomUUID(), correlationId, taskId, payloadStr, now, now);
+  }
+
+  /**
+   * Gets the status of a pending approval for a given task and payload.
+   */
+  getPendingApprovalStatus(taskId: string, payload: unknown): 'pending' | 'granted' | 'denied' | null {
+    const payloadStr = JSON.stringify(payload);
+    const row = this.db.prepare(`
+      SELECT status FROM pending_approvals
+      WHERE task_id = ? AND request_payload_json = ?
+      ORDER BY updated_at DESC LIMIT 1
+    `).get(taskId, payloadStr) as { status: string } | undefined;
+    
+    return (row?.status as 'pending' | 'granted' | 'denied') || null;
+  }
 }

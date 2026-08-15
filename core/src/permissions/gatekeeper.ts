@@ -8,15 +8,18 @@ import {
   AgentPolicy,
   PolicyMap,
   DEFAULT_AGENT_POLICIES,
+  AgentRole,
 } from './policy.js';
+import { executionContext } from '../lib/context.js';
 
-export { GuardedAction, AgentPolicy, PolicyMap, DEFAULT_AGENT_POLICIES };
+export { GuardedAction, AgentPolicy, PolicyMap, DEFAULT_AGENT_POLICIES, AgentRole };
 
 export interface PermissionRequest {
-  actor: string;
+  actor: AgentRole;
   action: GuardedAction | string;
   params: {
     path?: string;
+    actingOnBehalfOf?: AgentRole;
     [key: string]: unknown;
   };
 }
@@ -24,7 +27,7 @@ export interface PermissionRequest {
 export interface PermissionDecision {
   granted: boolean;
   correlationId: string;
-  denialReason?: 'not-permitted' | 'explicit' | 'timeout' | 'error';
+  denialReason?: 'not-permitted' | 'explicit' | 'timeout' | 'error' | 'pending-approval';
   approver?: 'system' | 'user' | 'policy';
 }
 
@@ -118,8 +121,14 @@ export class PermissionGatekeeper {
     // Terminal command allow-list pre-approval logic
     if (action === 'terminal-run') {
       const command = request.params.command as string;
-      const isCmdAllowed = config.terminalAllowlist.some(cmd => {
-        return command === cmd || command.startsWith(cmd + ' ');
+      const isCmdAllowed = config.terminalAllowlist.some(allowedCmd => {
+        const trimmedAllowed = allowedCmd.trim();
+        if (trimmedAllowed.endsWith('*')) {
+          const prefix = trimmedAllowed.slice(0, -1).trim();
+          return command === prefix || command.startsWith(prefix + ' ');
+        } else {
+          return command.trim() === trimmedAllowed;
+        }
       });
       if (isCmdAllowed) {
         isAutoApproved = true;
@@ -148,6 +157,53 @@ export class PermissionGatekeeper {
     }
 
     // Step 2b: Interactive / High-Friction Prompt check
+    const context = executionContext.getStore();
+    if (config.unattended && context && context.taskId) {
+      const payload = { ...request, action };
+      const pendingStatus = this.auditLog.getPendingApprovalStatus(context.taskId, payload);
+
+      if (pendingStatus === 'granted') {
+        const correlationId = this.auditLog.recordDecision({
+          actor: request.actor,
+          action: action,
+          params: request.params,
+          approvalStatus: 'granted',
+          approver: 'user', // Approved via CLI
+        });
+        this.logger.info(
+          { correlationId, actor: request.actor, action: action, approver: 'user' },
+          'Permission request GRANTED via Unattended Approval Queue.'
+        );
+        return { granted: true, correlationId, approver: 'user' };
+      } else if (pendingStatus === 'denied') {
+        const correlationId = this.auditLog.recordDecision({
+          actor: request.actor,
+          action: action,
+          params: request.params,
+          approvalStatus: 'denied',
+          approver: 'user',
+        });
+        return { granted: false, correlationId, denialReason: 'explicit', approver: 'user' };
+      } else {
+        // 'pending' or null (not requested yet)
+        const correlationId = this.auditLog.recordDecision({
+          actor: request.actor,
+          action: action,
+          params: request.params,
+          approvalStatus: 'denied', // Denied for now to block execution
+          approver: 'system',
+        });
+        if (pendingStatus !== 'pending') {
+           this.auditLog.recordPendingApproval(correlationId, context.taskId, payload);
+           this.logger.info(
+             { correlationId, actor: request.actor, action: action, taskId: context.taskId },
+             'Permission request queued for Unattended Approval.'
+           );
+        }
+        return { granted: false, correlationId, denialReason: 'pending-approval', approver: 'system' };
+      }
+    }
+
     const isHighFriction = ['git-force-push', 'git-history-rewrite', 'destructive', 'terminal-run'].includes(action);
     const promptToUse = isHighFriction ? this.highFrictionPrompt : this.approvalPrompt;
 

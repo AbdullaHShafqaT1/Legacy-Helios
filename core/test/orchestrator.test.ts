@@ -23,8 +23,8 @@ describe('Orchestrator Class', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-orch-test-'));
     db = openDb(':memory:');
-    logger = createLogger('test-orch-logger', 'silent');
-    queue = new TaskQueue(db, createLogger('test-q', 'silent'));
+    logger = createLogger('test-orch-logger', 'info');
+    queue = new TaskQueue(db, createLogger('test-q', 'info'));
     agentRouter = new AgentRouter();
     eventBus = new JarvisEventBus();
 

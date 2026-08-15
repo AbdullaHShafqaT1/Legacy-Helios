@@ -42,7 +42,7 @@ describe('ClaudeConnector', () => {
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 4096,
       messages: [{ role: 'user', content: 'Greet' }]
-    });
+    }, { timeout: 60000 });
   });
 
   it('should support appending JSON file context to the prompt description', async () => {

@@ -4,6 +4,7 @@ import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
 import { Logger } from 'pino';
 import { redactSecrets } from '../../core/src/lib/redact.js';
+import { AgentRole } from '../../core/src/permissions/policy.js';
 
 export interface TerminalConnectorOptions {
   projectRoot: string;
@@ -79,7 +80,7 @@ export class TerminalConnector {
     };
   }
 
-  async execute(actor: string, commandString: string, cwdDir?: string, actingOnBehalfOf?: string): Promise<{ stdout: string; stderr: string; exitCode: number | null; error?: string }> {
+  async execute(actor: AgentRole, commandString: string, cwdDir?: string, actingOnBehalfOf?: AgentRole): Promise<{ stdout: string; stderr: string; exitCode: number | null; error?: string }> {
     const targetCwd = this.validateCwd(cwdDir);
 
     const authorization = await this.gatekeeper.authorize({

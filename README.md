@@ -1,4 +1,4 @@
-# Legacy's Helios - Jarvis OS Kernel (Phases 1–5 Complete)
+# Legacy's Helios - Jarvis OS Kernel (Phases 1–6 Complete)
 
 > **A modular, autonomous AI Operating System designed for software engineering, automation, scientific research, and deep productivity.**
 
@@ -13,10 +13,10 @@
 
 ## 👁️ Project Scope & Boundaries
 
-### What Jarvis Phases 1–5 ARE:
-**Jarvis Phases 1–5** establish the core operational kernel, permission security layer, local filesystem/git connectors, semantic memory retention, specialized worker agents, browser automation, and terminal operation:
-1. **The Task Queue (`TaskQueue`)**: A relational DAG scheduler running on SQLite (utilizing `better-sqlite3`) with WAL journaling, immutable audit logs via database triggers, priority sorting, retry management, dependency gating, and deterministic same-millisecond FIFO task ordering via monotonic `sequence_id`.
-2. **The Model Router (`ModelRouter`)**: A routing facade dispatcher with exponential backoff retries connecting to the Anthropic messages API, supporting `"coding"`, `"reasoning"`, and `"research"` task types.
+### What Jarvis Phases 1–6 ARE:
+**Jarvis Phases 1–6** establish the core operational kernel, permission security layer, local filesystem/git connectors, semantic memory retention, specialized worker agents, browser automation, terminal operation, and cron-based scheduling:
+1. **The Task Queue (`TaskQueue`)**: A relational DAG scheduler running on SQLite (utilizing `better-sqlite3`) with WAL journaling, immutable audit logs via database triggers, priority sorting, retry management, dependency gating, deterministic same-millisecond FIFO task ordering via monotonic `sequence_id`, and a full cron-based scheduler supporting missed-run policies (skip/catch-up).
+2. **The Model Router (`ModelRouter`)**: A routing facade dispatcher with exponential backoff retries connecting to the Anthropic messages API, supporting `"coding"`, `"reasoning"`, and `"research"` task types, with configurable request timeouts.
 3. **The Worker Agents**:
    - **`SoftwareEngineerAgent`**: Executes LLM-driven coding requirements, writing and modifying file outputs on disk under strict Permission Gatekeeper gating. Appends recalled semantic memories into the model context, and stores task summaries upon completion.
    - **`ResearcherAgent`**: Evaluates natural-language queries and scoped filesystem context, returning structured research summaries (`summary`, `citations`, `confidence`, `caveats`). Operates with read-only permissions and never attempts mutations. Integrates project-level semantic recall and completion recording.
@@ -25,17 +25,17 @@
    - **`FilesystemConnector`**: Provides project-root scoped read/write/delete access (`listDir`, `readFile`, `writeFile`, `deleteFile`) with strict path-traversal protection and audit logging.
    - **`GitConnector`**: Provides project-root scoped Git operations (`status`, `log`, `diff`, `commit`, `push`, `forcePush`, `resetHard`) with error classification and high-friction confirmation gating for destructive operations.
    - **`BrowserConnector`**: Playwright-backed headless browser automation with risk-tiered gating (`browser-read` / `browser-write` / `browser-admin`), local-URL blocking, per-domain allowlist, and full audit logging.
-   - **`TerminalConnector`**: Path-scoped shell command execution with configurable timeout, allowlist pre-approval for safe commands, high-friction gating for unlisted commands, process-tree kill on emergency stop, and stdout/stderr secrets redaction.
-6. **The Daemon & CLI**: An asynchronous poll loop orchestrator daemon and a 5-command CLI interface (`submit`, `status`, `logs`, `stop`, `help`).
+   - **`TerminalConnector`**: Path-scoped shell command execution with configurable timeout, exact-match and wildcard allowlist pre-approval for safe commands, high-friction gating for unlisted commands, process-tree kill on emergency stop, and stdout/stderr secrets redaction.
+6. **The Daemon & CLI**: An asynchronous poll loop orchestrator daemon (using `AsyncLocalStorage` for strict context tracking and unattended approval queues) and a 7-command CLI interface (`submit`, `status`, `logs`, `stop`, `help`, `approve`, `briefing`).
 7. **Semantic Memory Manager (`MemoryManager`)**: A local-first semantic memory retrieval pipeline using `SqliteVectorStore` (type `'sqlite-json-cosine'`) to store JSON-serialized embedding float arrays, supporting context recall (via character n-gram TF-IDF embeddings) and automated write integrations on task completion for both Software Engineer and Researcher agents, limited by FIFO eviction policy.
 
-### What Jarvis Phases 1–5 are NOT (Deferred to Phase 6):
+### What Jarvis Phases 1–6 are NOT (Deferred to Phase 7):
 - **No Voice Interface**: Audio processing is deferred.
 - **No Additional Agent Personas**: Review and QA agent personas beyond the current six are deferred.
 - **No External / Dynamic Cloud Vector Database**: ChromaDB, Pinecone, or Milvus are excluded; memory relies strictly on a local-first SQLite file vector database (type `'sqlite-json-cosine'`).
 - **No Cross-Process Message Brokers**: Event routing is strictly in-process; Redis/NATS pub-sub is deferred.
 - **No Electron/Graphical GUI**: The system runs strictly in TTY terminal environments.
-- **No Linux/macOS CI Matrix**: Developed and verified locally on Windows; multi-OS CI matrices and cloud VM orchestrations are deferred to Phase 6.
+- **No Linux/macOS CI Matrix**: Developed and verified locally on Windows; however, multi-OS CI matrices testing Ubuntu and macOS are fully enabled.
 
 ---
 

@@ -116,6 +116,14 @@ export class SoftwareEngineerAgent implements Agent {
     });
 
     if (!authorization.granted) {
+      if (authorization.denialReason === 'pending-approval') {
+        return {
+          status: 'pending-approval',
+          filesChanged: [],
+          explanation: `Write to path "${resolvedPath}" paused for Unattended Approval.`,
+        };
+      }
+
       const outcomeText = authorization.denialReason === 'timeout'
         ? 'denied — timeout'
         : authorization.denialReason === 'not-permitted'
@@ -246,6 +254,18 @@ export class SoftwareEngineerAgent implements Agent {
       });
 
       if (!authorization.granted) {
+        if (authorization.denialReason === 'pending-approval') {
+          return {
+            id: crypto.randomUUID(),
+            sender: this.name,
+            recipient: message.sender,
+            type: 'write-file-response',
+            payload: { success: false, error: 'pending-approval' },
+            correlationId: message.id,
+            timestamp: new Date().toISOString(),
+          };
+        }
+
         return {
           id: crypto.randomUUID(),
           sender: this.name,

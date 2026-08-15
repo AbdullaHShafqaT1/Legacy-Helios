@@ -7,7 +7,7 @@ export interface AgentTaskInput {
 }
 
 export interface AgentResult {
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'pending-approval';
   filesChanged: string[];
   explanation: string;
   error?: string;

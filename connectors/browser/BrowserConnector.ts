@@ -3,6 +3,8 @@ import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
 import { Logger } from 'pino';
 import { redactSecrets } from '../../core/src/lib/redact.js';
+import { AgentRole } from '../../core/src/permissions/policy.js';
+import { executionContext } from '../../core/src/lib/context.js';
 
 export interface BrowserConnectorOptions {
   gatekeeper: PermissionGatekeeper;
@@ -16,8 +18,7 @@ export class BrowserConnector {
   private auditLog: AuditLog;
   private logger: Logger;
   private headless: boolean;
-  private browser: Browser | null = null;
-  private page: Page | null = null;
+  private sessions = new Map<string, { browser: Browser; page: Page }>();
 
   constructor(options: BrowserConnectorOptions) {
     this.gatekeeper = options.gatekeeper;
@@ -27,24 +28,38 @@ export class BrowserConnector {
   }
 
   private async ensureBrowser(): Promise<Page> {
-    if (this.browser && this.page) {
-      return this.page;
+    const context = executionContext.getStore();
+    const taskId = context?.taskId || 'global';
+
+    let session = this.sessions.get(taskId);
+    if (session) {
+      return session.page;
     }
-    this.browser = await chromium.launch({ headless: this.headless });
-    const context = await this.browser.newContext();
-    this.page = await context.newPage();
-    return this.page;
+
+    const browser = await chromium.launch({ headless: this.headless });
+    const browserContext = await browser.newContext();
+    const page = await browserContext.newPage();
+    
+    this.sessions.set(taskId, { browser, page });
+    return page;
   }
 
-  async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
+  async close(taskId?: string): Promise<void> {
+    if (taskId) {
+      const session = this.sessions.get(taskId);
+      if (session) {
+        await session.browser.close();
+        this.sessions.delete(taskId);
+      }
+    } else {
+      for (const [key, session] of this.sessions.entries()) {
+        await session.browser.close();
+      }
+      this.sessions.clear();
     }
   }
 
-  async navigate(actor: string, url: string, actingOnBehalfOf?: string): Promise<void> {
+  async navigate(actor: AgentRole, url: string, actingOnBehalfOf?: AgentRole): Promise<void> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-read',
@@ -67,7 +82,7 @@ export class BrowserConnector {
     }
   }
 
-  async readContent(actor: string, actingOnBehalfOf?: string): Promise<string> {
+  async readContent(actor: AgentRole, actingOnBehalfOf?: AgentRole): Promise<string> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-read',
@@ -91,7 +106,7 @@ export class BrowserConnector {
     }
   }
 
-  async click(actor: string, selector: string, actingOnBehalfOf?: string): Promise<void> {
+  async click(actor: AgentRole, selector: string, actingOnBehalfOf?: AgentRole): Promise<void> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-write',
@@ -114,7 +129,7 @@ export class BrowserConnector {
     }
   }
 
-  async fill(actor: string, selector: string, value: string, actingOnBehalfOf?: string): Promise<void> {
+  async fill(actor: AgentRole, selector: string, value: string, actingOnBehalfOf?: AgentRole): Promise<void> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-write',
@@ -137,7 +152,7 @@ export class BrowserConnector {
     }
   }
 
-  async download(actor: string, url?: string, actingOnBehalfOf?: string): Promise<string> {
+  async download(actor: AgentRole, url?: string, actingOnBehalfOf?: AgentRole): Promise<string> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-write',
@@ -169,7 +184,7 @@ export class BrowserConnector {
     }
   }
 
-  async upload(actor: string, selector: string, filePath: string, actingOnBehalfOf?: string): Promise<void> {
+  async upload(actor: AgentRole, selector: string, filePath: string, actingOnBehalfOf?: AgentRole): Promise<void> {
     const authorization = await this.gatekeeper.authorize({
       actor,
       action: 'browser-write',

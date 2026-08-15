@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Logger } from 'pino';
 import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
+import { AgentRole } from '../../core/src/permissions/policy.js';
 
 export class PathTraversalError extends Error {
   constructor(message: string) {
@@ -70,7 +71,7 @@ export class FilesystemConnector {
    * If scoping check fails, logs an audit decision + outcome pair flagged as a security violation
    * and throws a PathTraversalError.
    */
-  private validateAndResolvePath(actor: string, actionName: string, targetPath: string): string {
+  private validateAndResolvePath(actor: AgentRole, actionName: string, targetPath: string): string {
     const resolvedTarget = path.resolve(this.projectRoot, targetPath);
 
     // Relative path check: Ensure relative path from projectRoot does not escape
@@ -106,7 +107,7 @@ export class FilesystemConnector {
     return resolvedTarget;
   }
 
-  private recordTraversalViolation(actor: string, actionName: string, targetPath: string, resolvedTarget: string): void {
+  private recordTraversalViolation(actor: AgentRole, actionName: string, targetPath: string, resolvedTarget: string): void {
     const correlationId = this.auditLog.recordDecision({
       actor,
       action: actionName,
@@ -132,7 +133,7 @@ export class FilesystemConnector {
    * Lists contents (files and subdirectories) of a directory within the project root.
    * Calls Gatekeeper for role permission check ('file-read').
    */
-  async listDir(actor: string, targetPath: string): Promise<DirectoryItem[]> {
+  async listDir(actor: AgentRole, targetPath: string): Promise<DirectoryItem[]> {
     const resolvedPath = this.validateAndResolvePath(actor, 'file-read', targetPath);
 
     const authorization = await this.gatekeeper.authorize({
@@ -186,7 +187,7 @@ export class FilesystemConnector {
    * Reads full file contents as a string within the project root.
    * Calls Gatekeeper for role permission check ('file-read').
    */
-  async readFile(actor: string, targetPath: string): Promise<string> {
+  async readFile(actor: AgentRole, targetPath: string): Promise<string> {
     const resolvedPath = this.validateAndResolvePath(actor, 'file-read', targetPath);
 
     const authorization = await this.gatekeeper.authorize({
@@ -225,7 +226,7 @@ export class FilesystemConnector {
    * Writes file contents to a path within the project root.
    * Routes operation through PermissionGatekeeper ('file-write') and records outcomes.
    */
-  async writeFile(actor: string, targetPath: string, content: string): Promise<FilesystemResult> {
+  async writeFile(actor: AgentRole, targetPath: string, content: string): Promise<FilesystemResult> {
     const resolvedPath = this.validateAndResolvePath(actor, 'file-write', targetPath);
 
     const authorization = await this.gatekeeper.authorize({
@@ -292,7 +293,7 @@ export class FilesystemConnector {
    * Deletes a file at a path within the project root.
    * Routes operation through PermissionGatekeeper ('file-delete') and records outcomes.
    */
-  async deleteFile(actor: string, targetPath: string): Promise<FilesystemResult> {
+  async deleteFile(actor: AgentRole, targetPath: string): Promise<FilesystemResult> {
     const resolvedPath = this.validateAndResolvePath(actor, 'file-delete', targetPath);
 
     const authorization = await this.gatekeeper.authorize({

@@ -18,12 +18,14 @@ export class ClaudeConnector implements ModelRoute {
   private maxRetries: number;
   private logger: Logger;
   private client: Anthropic;
+  private timeoutMs: number;
 
   constructor(options: {
     apiKey: string;
     model: string;
     maxRetries?: number;
     logger: Logger;
+    timeoutMs?: number;
   }) {
     if (!options.apiKey || options.apiKey.trim() === '') {
       throw new ClaudeConnectorError('API key must be provided.');
@@ -35,6 +37,7 @@ export class ClaudeConnector implements ModelRoute {
     this.model = options.model;
     this.maxRetries = options.maxRetries ?? 3;
     this.logger = options.logger;
+    this.timeoutMs = options.timeoutMs ?? 60000;
     this.client = new Anthropic({ apiKey: this.apiKey });
   }
 
@@ -62,6 +65,8 @@ export class ClaudeConnector implements ModelRoute {
           model: this.model,
           max_tokens: 4096,
           messages: [{ role: 'user', content: prompt }]
+        }, {
+          timeout: this.timeoutMs
         });
 
         // Extract and concatenate all text blocks

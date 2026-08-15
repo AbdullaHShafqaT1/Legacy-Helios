@@ -2,17 +2,18 @@ import { Logger } from 'pino';
 import { AuditLog } from '../permissions/auditLog.js';
 import { AgentRouter } from './agentRouter.js';
 import { EventEmitter } from 'node:events';
+import { AgentRole } from '../permissions/policy.js';
 
 export interface Message {
   id: string;
-  sender: string;
-  recipient: string;
+  sender: AgentRole;
+  recipient: AgentRole;
   type: string;
   payload: any;
   correlationId?: string;
-  actingOnBehalfOf?: string;
+  actingOnBehalfOf?: AgentRole;
   timestamp: string;
-  hops?: string[];
+  hops?: AgentRole[];
 }
 
 export class MessageRouterError extends Error {

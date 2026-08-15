@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
 import { JarvisEventBus } from '../events/bus.js';
+import cronParserPkg from 'cron-parser';
+const cronParser = cronParserPkg.default || cronParserPkg;
 
 /**
  * Custom error thrown by the TaskQueue class.
@@ -45,6 +47,16 @@ export interface EnqueueInput {
   priority?: number;
   dependsOn?: string;
   maxRetries?: number;
+}
+
+/**
+ * Input structure for scheduling a recurring task.
+ */
+export interface ScheduleInput {
+  id?: string;
+  description: string;
+  scheduleExpression: string;
+  missedRunPolicy: 'skip' | 'catch-up';
 }
 
 export class TaskQueue {
@@ -341,6 +353,119 @@ export class TaskQueue {
           
           changed = true; // Cascade update check down the DAG
         }
+      }
+    }
+  }
+
+  /**
+   * Schedules a new recurring task.
+   */
+  scheduleTask(input: ScheduleInput): string {
+    if (!input.description || input.description.trim() === '') {
+      throw new TaskQueueError('Task description cannot be empty or whitespace.');
+    }
+
+    try {
+      // Validate cron expression
+      cronParser.parseExpression(input.scheduleExpression);
+    } catch (err: any) {
+      throw new TaskQueueError(`Invalid cron expression: ${err.message}`);
+    }
+
+    const taskId = input.id || crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const insertStmt = this.db.prepare(`
+      INSERT INTO scheduled_tasks (
+        id, description, schedule_expression, missed_run_policy, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        description = excluded.description,
+        schedule_expression = excluded.schedule_expression,
+        missed_run_policy = excluded.missed_run_policy,
+        updated_at = excluded.updated_at
+    `);
+
+    insertStmt.run(
+      taskId,
+      input.description.trim(),
+      input.scheduleExpression,
+      input.missedRunPolicy,
+      now,
+      now
+    );
+
+    this.logger.info({ scheduledTaskId: taskId, schedule: input.scheduleExpression }, 'Scheduled recurring task.');
+    return taskId;
+  }
+
+  /**
+   * Evaluates scheduled tasks and queues pending executions.
+   */
+  evaluateScheduledTasks(): void {
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    const scheduledTasks = this.db.prepare(`
+      SELECT * FROM scheduled_tasks
+      WHERE next_run_at IS NULL OR next_run_at <= ?
+    `).all(nowIso) as any[];
+
+    for (const st of scheduledTasks) {
+      try {
+        const interval = cronParser.parseExpression(st.schedule_expression, {
+          currentDate: st.next_run_at ? new Date(st.next_run_at) : now,
+        });
+
+        // Initialize next_run_at if it's the first time
+        if (!st.next_run_at) {
+          const nextRunAt = interval.next().toISOString();
+          this.db.prepare(`
+            UPDATE scheduled_tasks SET next_run_at = ?, updated_at = ? WHERE id = ?
+          `).run(nextRunAt, nowIso, st.id);
+          continue;
+        }
+
+        let nextRunDate = new Date(st.next_run_at);
+        let runCount = 0;
+
+        // Count how many runs we missed up to 'now'
+        const runsToSchedule: Date[] = [];
+        while (nextRunDate.getTime() <= now.getTime()) {
+          runsToSchedule.push(nextRunDate);
+          nextRunDate = interval.next().toDate();
+          runCount++;
+
+          // Prevent infinite loops if cron is too frequent
+          if (runCount > 100) break;
+        }
+
+        if (runsToSchedule.length > 0) {
+          this.logger.info({ scheduledTaskId: st.id, runCount }, 'Triggering scheduled task runs.');
+          
+          if (st.missed_run_policy === 'skip') {
+            // Just schedule once for the latest missed run
+            this.enqueue({
+              description: st.description,
+              priority: 50,
+            });
+          } else if (st.missed_run_policy === 'catch-up') {
+            // Schedule all missed runs
+            for (const runDate of runsToSchedule) {
+              this.enqueue({
+                description: `${st.description} (Scheduled run for ${runDate.toISOString()})`,
+                priority: 50,
+              });
+            }
+          }
+
+          // Update next_run_at
+          this.db.prepare(`
+            UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = ?
+          `).run(nowIso, nextRunDate.toISOString(), nowIso, st.id);
+        }
+      } catch (err: any) {
+        this.logger.error({ err, scheduledTaskId: st.id }, 'Failed to evaluate scheduled task.');
       }
     }
   }
