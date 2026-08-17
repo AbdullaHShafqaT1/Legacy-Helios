@@ -28,21 +28,36 @@ describe('BrowserConnector concurrency', () => {
   // Access private method ensureBrowser for testing via any cast
   const ensureBrowser = (browser as any).ensureBrowser.bind(browser);
 
-  let page1: Page | null = null;
-  let page2: Page | null = null;
+    let page1: Page | null = null;
+    let page2: Page | null = null;
+
+    // We'll actually navigate both pages to distinct URLs to prove they don't leak state
+    const urlA = 'data:text/html,<h1>Task A</h1>';
+    const urlB = 'data:text/html,<h1>Task B</h1>';
 
     await Promise.all([
       executionContext.run({ taskId: 'task-A' }, async () => {
         page1 = await ensureBrowser();
+        await page1!.goto(urlA);
       }),
       executionContext.run({ taskId: 'task-B' }, async () => {
         page2 = await ensureBrowser();
+        await page2!.goto(urlB);
       })
     ]);
 
     expect(page1).toBeDefined();
     expect(page2).toBeDefined();
     expect(page1).not.toBe(page2);
+
+    // Verify isolation - Task A should see Task A's content, Task B should see Task B's content
+    const contentA = await page1!.content();
+    const contentB = await page2!.content();
+
+    expect(contentA).toContain('Task A');
+    expect(contentA).not.toContain('Task B');
+    expect(contentB).toContain('Task B');
+    expect(contentB).not.toContain('Task A');
 
     await browser.close(); // Clean up all sessions
     db.close();

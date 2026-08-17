@@ -3,13 +3,13 @@ import { AuditLog } from './auditLog.js';
 import { redactSecrets } from '../lib/redact.js';
 import { TimeoutError, createHighFrictionApprovalPrompt } from '../lib/prompt.js';
 import { loadConfig } from '../lib/config.js';
-import {
+import type {
   GuardedAction,
   AgentPolicy,
   PolicyMap,
-  DEFAULT_AGENT_POLICIES,
   AgentRole,
 } from './policy.js';
+import { DEFAULT_AGENT_POLICIES } from './policy.js';
 import { executionContext } from '../lib/context.js';
 
 export { GuardedAction, AgentPolicy, PolicyMap, DEFAULT_AGENT_POLICIES, AgentRole };
@@ -135,25 +135,31 @@ export class PermissionGatekeeper {
       }
     }
 
-    if (isAutoApproved) {
-      const correlationId = this.auditLog.recordDecision({
-        actor: request.actor,
-        action: action,
-        params: request.params,
-        approvalStatus: 'granted',
-        approver: 'policy',
-      });
+    // 1. Record the request FIRST
+    const correlationId = this.auditLog.recordRequest({
+      actor: request.actor,
+      action: request.action as string,
+      params: request.params
+    });
 
+    const finish = (granted: boolean, denialReason?: PermissionDecision['denialReason'], approver: 'system' | 'user' | 'policy' | null = null): PermissionDecision => {
+      this.auditLog.recordDecision({
+        correlationId,
+        actor: request.actor,
+        action: request.action as string,
+        params: request.params,
+        approvalStatus: denialReason === 'pending-approval' ? 'pending' : (granted ? 'granted' : 'denied'),
+        approver
+      });
+      return { granted, correlationId, denialReason };
+    };
+
+    if (isAutoApproved) {
       this.logger.info(
         { correlationId, actor: request.actor, action: action, approver: 'policy' },
         'Permission request GRANTED via policy pre-approval.'
       );
-
-      return {
-        granted: true,
-        correlationId,
-        approver: 'policy',
-      };
+      return finish(true, undefined, 'policy');
     }
 
     // Step 2b: Interactive / High-Friction Prompt check
@@ -163,36 +169,15 @@ export class PermissionGatekeeper {
       const pendingStatus = this.auditLog.getPendingApprovalStatus(context.taskId, payload);
 
       if (pendingStatus === 'granted') {
-        const correlationId = this.auditLog.recordDecision({
-          actor: request.actor,
-          action: action,
-          params: request.params,
-          approvalStatus: 'granted',
-          approver: 'user', // Approved via CLI
-        });
         this.logger.info(
           { correlationId, actor: request.actor, action: action, approver: 'user' },
           'Permission request GRANTED via Unattended Approval Queue.'
         );
-        return { granted: true, correlationId, approver: 'user' };
+        return finish(true, undefined, 'user');
       } else if (pendingStatus === 'denied') {
-        const correlationId = this.auditLog.recordDecision({
-          actor: request.actor,
-          action: action,
-          params: request.params,
-          approvalStatus: 'denied',
-          approver: 'user',
-        });
-        return { granted: false, correlationId, denialReason: 'explicit', approver: 'user' };
+        return finish(false, 'explicit', 'user');
       } else {
         // 'pending' or null (not requested yet)
-        const correlationId = this.auditLog.recordDecision({
-          actor: request.actor,
-          action: action,
-          params: request.params,
-          approvalStatus: 'denied', // Denied for now to block execution
-          approver: 'system',
-        });
         if (pendingStatus !== 'pending') {
            this.auditLog.recordPendingApproval(correlationId, context.taskId, payload);
            this.logger.info(
@@ -200,7 +185,7 @@ export class PermissionGatekeeper {
              'Permission request queued for Unattended Approval.'
            );
         }
-        return { granted: false, correlationId, denialReason: 'pending-approval', approver: 'system' };
+        return finish(false, 'pending-approval', 'system');
       }
     }
 
@@ -225,41 +210,25 @@ export class PermissionGatekeeper {
       } else {
         // Redact error trace arguments before passing to warn log
         const redactedError = redactSecrets(error);
-        this.logger.warn(
-          { error: redactedError, requestActor: request.actor, requestAction: action },
-          'Approval prompt threw an error. Defaulting to deny-by-default.'
-        );
+        this.logger.warn({ error: redactedError }, 'Approval prompt encountered an error.');
         approved = false;
         denialReason = 'error';
       }
     }
 
-    const correlationId = this.auditLog.recordDecision({
-      actor: request.actor,
-      action: action,
-      params: request.params,
-      approvalStatus: approved ? 'granted' : 'denied',
-      approver: 'user',
-    });
-
     if (approved) {
       this.logger.info(
-        { correlationId, actor: request.actor, action: action, path: request.params.path },
-        'Permission request GRANTED.'
+        { correlationId, actor: request.actor, action: action, approver: 'user' },
+        'Permission request GRANTED by user.'
       );
+      return finish(true, undefined, 'user');
     } else {
-      this.logger.warn(
-        { correlationId, actor: request.actor, action: action, path: request.params.path, denialReason },
+      this.logger.info(
+        { correlationId, actor: request.actor, action: action, denialReason, approver: 'user' },
         'Permission request DENIED.'
       );
+      return finish(false, denialReason, 'user');
     }
-
-    return {
-      granted: approved,
-      correlationId,
-      denialReason,
-      approver: 'user',
-    };
   }
 }
 

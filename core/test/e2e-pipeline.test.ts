@@ -305,19 +305,35 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
     expect(updatedTask?.status).toBe('pending');
     expect(updatedTask?.retries).toBe(0); // Should not increment retries when paused for approval
 
-    // Check Audit Log for the pending-approval decision and the pending_approvals table
+    // Check Audit Log for the pending-approval decision    // Assert pending state in Audit Log (all 4 transitions)
     const logs1 = auditLog.recent();
+    const requestRow = logs1.find(r => r.event_type === 'request' && r.action === 'file-write');
+    expect(requestRow).toBeDefined();
+
     const decisionRow1 = logs1.find(r => r.event_type === 'decision' && r.action === 'file-write');
     expect(decisionRow1).toBeDefined();
-    expect(decisionRow1?.approval_status).toBe('denied'); // Temporarily denied to pause execution
+    expect(decisionRow1?.approval_status).toBe('pending'); // Now properly records as pending
     
     // Check pending_approvals table
     const pendingRows = db.prepare(`SELECT * FROM pending_approvals WHERE task_id = ? AND status = 'pending'`).all(task.id);
     expect(pendingRows.length).toBe(1);
 
-    // 3. Approve via DB (simulate CLI 'jarvis approve')
-    db.prepare(`UPDATE pending_approvals SET status = 'granted', updated_at = ? WHERE task_id = ?`)
-      .run(new Date().toISOString(), task.id);
+    // 3. Approve via real CLI command
+    const { spawnSync } = await import('node:child_process');
+    const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    const cliResult = spawnSync(npxCmd, ['tsx', '../../cli/index.ts', 'approve', task.id], {
+      cwd: __dirname,
+      shell: process.platform === 'win32',
+      env: {
+         ...process.env,
+         JARVIS_DB_PATH: dbPath,
+         JARVIS_UNATTENDED: 'true'
+      }
+    });
+    if (cliResult.status !== 0) {
+      console.error(cliResult.stderr?.toString() || cliResult.stdout?.toString() || cliResult.error);
+    }
+    expect(cliResult.status).toBe(0);
 
     // 4. Wait for next orchestrator tick to pick it up and resume
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -332,6 +348,11 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
     const decisionRow2 = logs2.find(r => r.event_type === 'decision' && r.action === 'file-write' && r.approval_status === 'granted');
     expect(decisionRow2).toBeDefined();
     expect(decisionRow2?.approver).toBe('user');
+
+    // And the outcome should be logged
+    const outcomeRow = logs2.find(r => r.event_type === 'outcome' && r.action === 'file-write');
+    expect(outcomeRow).toBeDefined();
+    expect(outcomeRow?.outcome).toContain('success');
 
     delete process.env.JARVIS_UNATTENDED;
     clearConfigCache();

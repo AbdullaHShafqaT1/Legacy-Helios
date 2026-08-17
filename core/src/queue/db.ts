@@ -82,12 +82,12 @@ export function openDb(dbPath: string): Database.Database {
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       correlation_id TEXT NOT NULL,
-      event_type TEXT NOT NULL CHECK (event_type IN ('decision', 'outcome')),
+      event_type TEXT NOT NULL CHECK (event_type IN ('request', 'decision', 'outcome')),
       timestamp TEXT NOT NULL,
       actor TEXT NOT NULL,
       action TEXT NOT NULL,
       params_json TEXT,
-      approval_status TEXT NOT NULL CHECK (approval_status IN ('granted', 'denied', 'n-a')),
+      approval_status TEXT NOT NULL CHECK (approval_status IN ('pending', 'granted', 'denied', 'n-a')),
       approver TEXT,
       outcome TEXT
     );
@@ -198,6 +198,22 @@ export function openDb(dbPath: string): Database.Database {
         )
         WHERE sequence_id IS NULL
       `);
+    }
+  }
+
+  // Audit Log Migration for Phase 6 Unattended 4-state transitions
+  const auditLogTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'").get();
+  if (auditLogTableExists) {
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE name='audit_log'").get() as { sql: string };
+    if (tableInfo && !tableInfo.sql.includes("'request'")) {
+      db.exec('PRAGMA foreign_keys=OFF;');
+      db.exec('DROP TRIGGER IF EXISTS trg_audit_log_prevent_update');
+      db.exec('DROP TRIGGER IF EXISTS trg_audit_log_prevent_delete');
+      db.exec('ALTER TABLE audit_log RENAME TO audit_log_old');
+      db.exec(schemaDdl);
+      db.exec('INSERT INTO audit_log SELECT * FROM audit_log_old');
+      db.exec('DROP TABLE audit_log_old');
+      db.exec('PRAGMA foreign_keys=ON;');
     }
   }
 

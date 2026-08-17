@@ -5,12 +5,12 @@ import { redactSecrets } from '../lib/redact.js';
 export interface AuditLogRow {
   id: number;
   correlation_id: string;
-  event_type: 'decision' | 'outcome';
+  event_type: 'request' | 'decision' | 'outcome';
   timestamp: string;
   actor: string;
   action: string;
   params_json: string | null;
-  approval_status: 'granted' | 'denied' | 'n-a';
+  approval_status: 'pending' | 'granted' | 'denied' | 'n-a';
   approver: string | null;
   outcome: string | null;
 }
@@ -23,19 +23,52 @@ export class AuditLog {
   }
 
   /**
-   * Records a permission request decision in the audit log.
+   * Records a permission request in the audit log BEFORE a decision is made.
    *
-   * @param input Detailed decision parameters.
-   * @returns A generated unique correlation ID linking this decision with its eventual outcome.
+   * @param input Detailed request parameters.
+   * @returns A generated unique correlation ID linking this request with its decision and outcome.
    */
-  recordDecision(input: {
+  recordRequest(input: {
     actor: string;
     action: string;
     params?: unknown;
-    approvalStatus: 'granted' | 'denied' | 'n-a';
-    approver: 'system' | 'user' | 'policy';
   }): string {
     const correlationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    
+    const redactedParams = redactSecrets(input.params ?? null);
+    const paramsJson = JSON.stringify(redactedParams);
+
+    const insertStmt = this.db.prepare(`
+      INSERT INTO audit_log (
+        correlation_id, event_type, timestamp, actor, action, params_json, approval_status, approver, outcome
+      ) VALUES (?, 'request', ?, ?, ?, ?, 'n-a', NULL, NULL)
+    `);
+
+    insertStmt.run(
+      correlationId,
+      now,
+      input.actor,
+      input.action,
+      paramsJson
+    );
+
+    return correlationId;
+  }
+
+  /**
+   * Records a permission request decision in the audit log.
+   *
+   * @param input Detailed decision parameters.
+   */
+  recordDecision(input: {
+    correlationId: string;
+    actor: string;
+    action: string;
+    params?: unknown;
+    approvalStatus: 'pending' | 'granted' | 'denied' | 'n-a';
+    approver: 'system' | 'user' | 'policy' | null;
+  }): void {
     const now = new Date().toISOString();
     
     // Apply recursive secrets redaction before stringifying
@@ -49,7 +82,7 @@ export class AuditLog {
     `);
 
     insertStmt.run(
-      correlationId,
+      input.correlationId,
       now,
       input.actor,
       input.action,
@@ -57,8 +90,6 @@ export class AuditLog {
       input.approvalStatus,
       input.approver
     );
-
-    return correlationId;
   }
 
   /**
