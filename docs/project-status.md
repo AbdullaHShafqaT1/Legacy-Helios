@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1–5 Complete)
+# Jarvis OS Project Status (Phases 1–6 Complete)
 
-This living status document captures the completion state of **Jarvis Phases 1 through 5**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phases 1 through 6**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -39,9 +39,14 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **5.4** | Delegation Safety (Adversarial Test): integration test verifying that a low-permission `researcher` agent cannot escalate to `terminal-run` or `browser-write` actions even via delegation message paths. | **COMPLETE** |
 | **5.5** | Cross-Platform Verification: audited codebase for platform-specific assumptions (path separators, `.cmd` binary resolution on Windows, `taskkill` vs SIGKILL process-tree teardown). Windows-verified; Linux/macOS CI matrix deferred to Phase 6. | **COMPLETE** |
 | **5.6** | Emergency-Stop Bus Integration: `queue:emergency-stop` EventBus handler wired in `bootstrap.ts` to invoke `terminalConnector.killAll()` and drain active browser sessions on halt. | **COMPLETE** |
+| **6.1** | Background CRON Scheduler: Added standard cron expression parsing and missed-run policies (skip vs catch-up). | **COMPLETE** |
+| **6.2** | Unattended Approval Queue: `JARVIS_UNATTENDED=true` logic added to Gatekeeper. Suspends active tasks requiring prompts into `pending-approval` instead of auto-approving or dying. Added CLI `approve` command. | **COMPLETE** |
+| **6.3** | Browser Concurrency: Process-level AsyncLocalStorage implemented to inject distinct `taskId` contexts into `BrowserConnector`, ensuring task isolation. | **COMPLETE** |
+| **6.4** | Per-OS CI matrix: `ubuntu-latest`, `windows-latest`, and `macos-latest` workflows added to GitHub actions and verified. | **COMPLETE** |
+| **6.5** | Real-Restart Resumption Simulation: Extracted orchestration loops. Simulated task resumption with cross-process test scripts due to daemon architectural limitations. | **PARTIAL** |
 
 ### Total Project Test Count:
-**164 tests** pass successfully across **26 test files** inside the repository.
+**174 tests** pass successfully across **30 test files** inside the repository.
 
 ---
 
@@ -107,6 +112,7 @@ A future developer picking up work after Phase 5 should review these technical d
 5. **Outcome Log Matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys, ensuring outcome logs remain decoupled from database write-locking triggers on the audit table.
 6. **Terminal Secrets Redaction Coverage**: Stdout/stderr secrets redaction in `TerminalConnector` relies on the same regex shapes as `redactSecrets`. Advanced credential shapes or multi-line secrets spanning chunk boundaries may not be caught.
 7. **Browser Headless-Only**: `BrowserConnector` always runs Playwright in headless mode (configurable via `JARVIS_BROWSER_HEADLESS`). Non-headless (visible) browser automation is possible via config but not tested.
+8. **Real-Restart Test (Objective 2 Limitation):** The `resumption.test.ts` does not execute an end-to-end true OS-level process boundary traversal test (i.e., launching the entire Orchestrator daemon via `child_process`, halting it via `SIGKILL` while a task is mid-flight, respawning it, and asserting recovery). The current test acts as an in-memory simulation that isolates DB operations via a child process merely to construct stale state. Writing a full multi-process daemon harness is deferred, and this remains an accepted limitation of the testing suite for Phase 6.
 
 ---
 
@@ -120,10 +126,10 @@ The table below provides the authoritative final resolution status for all carry
 | **2. Readline Gatekeeper approval test coverage** | **RESOLVED** | Full interactive test coverage (approve, deny, timeout) added in Sub-task 2.1; expanded in 2.2 and 2.5 for role-based policies and high-friction confirmation prompts. |
 | **3. CI pipeline automation** | **RESOLVED** | GitHub Actions CI workflow added in Sub-task 2.6 (`.github/workflows/ci.yml`) running clean dependency install, typechecking (`npx tsc --noEmit`), and full Vitest suite (`npm test`). |
 | **4. Double-scheduleNext polling redundancy** | **RESOLVED** | Inspected in 2.1 and confirmed harmless (idempotent timeout re-arming in `agentRouter.ts`); retained as documented transition behavior. |
-| **5. Claude API connection timeout** | **STILL DEFERRED (Phase 6)** | Custom socket/request timeout limits on Anthropic Claude API connections deferred to Phase 6 production hardening. |
-| **6. Local model runtime (Ollama)** | **STILL DEFERRED (Phase 6)** | Local LLM serving via Ollama deferred to Phase 6 when offline model execution is prioritized. |
-| **7. Cross-platform verification (Linux/macOS)** | **STILL DEFERRED (Phase 6)** | Developed and tested on Windows; multi-OS CI matrix and cross-platform behavior testing deferred to Phase 6. |
-| **8. Linear-scan search complexity at scale** | **DEFERRED (Phase 6)** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
+| **5. Claude API connection timeout** | **RESOLVED (Phase 6)** | Custom AbortController implementation applied to Anthropic fetch calls for reliable timeouts. |
+| **6. Local model runtime (Ollama)** | **STILL DEFERRED** | Local LLM serving via Ollama deferred to future offline requirement phase. |
+| **7. Cross-platform verification (Linux/macOS)** | **RESOLVED (Phase 6)** | `.github/workflows/ci.yml` expanded to include `ubuntu-latest`, `macos-latest`, and `windows-latest` matrices. Tested clean across all. |
+| **8. Linear-scan search complexity at scale** | **DEFERRED** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
 | **9. Secrets pattern matching regex gaps** | **DEFERRED (Phase 6)** | Redaction scanner relies on basic regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
 | **10. Browser automation** | **RESOLVED (Phase 5)** | `BrowserConnector` and `BrowserOperatorAgent` implemented with full gated risk-tier taxonomy, local-URL blocking, and allowlist enforcement. |
 | **11. Terminal operator** | **RESOLVED (Phase 5)** | `TerminalConnector` and `TerminalOperatorAgent` implemented with path scoping, allowlist pre-approval, timeout, clean process-tree kill, and secrets redaction. |
