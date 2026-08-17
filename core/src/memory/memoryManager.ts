@@ -123,7 +123,7 @@ export class MemoryManager {
     // 1. Redaction check (runs BEFORE embedding/storing)
     const matchedCategory = this.checkRedaction(content);
     if (matchedCategory) {
-      const correlationId = this.auditLog.recordDecision({
+      const correlationId = this.auditLog.recordRequest({
         actor: sourceAgent,
         action: 'memory-write',
         params: {
@@ -131,6 +131,12 @@ export class MemoryManager {
           sourceTaskId,
           content: '[REDACTED - SENSITIVE CONTENT]'
         },
+      });
+
+      this.auditLog.recordDecision({
+        correlationId,
+        actor: sourceAgent,
+        action: 'memory-write',
         approvalStatus: 'denied',
         approver: 'system',
       });

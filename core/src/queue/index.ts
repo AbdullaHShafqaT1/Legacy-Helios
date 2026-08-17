@@ -2,8 +2,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
 import { JarvisEventBus } from '../events/bus.js';
-import cronParserPkg from 'cron-parser';
-const cronParser = cronParserPkg.default || cronParserPkg;
+import * as cronParser from 'cron-parser';
 
 /**
  * Custom error thrown by the TaskQueue class.
@@ -35,6 +34,7 @@ export interface TaskRow {
   created_at: string;
   updated_at: string;
   sequence_id: number;
+  source: 'cli' | 'voice';
 }
 
 /**
@@ -47,6 +47,7 @@ export interface EnqueueInput {
   priority?: number;
   dependsOn?: string;
   maxRetries?: number;
+  source?: 'cli' | 'voice';
 }
 
 /**
@@ -106,8 +107,8 @@ export class TaskQueue {
 
     const insertStmt = this.db.prepare(`
       INSERT INTO tasks (
-        id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id
-      ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks))
+        id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id, source
+      ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks), ?)
     `);
 
     insertStmt.run(
@@ -118,7 +119,8 @@ export class TaskQueue {
       input.dependsOn ?? null,
       input.maxRetries ?? 3,
       now,
-      now
+      now,
+      input.source ?? 'cli'
     );
 
     const inserted = this.getById(taskId);

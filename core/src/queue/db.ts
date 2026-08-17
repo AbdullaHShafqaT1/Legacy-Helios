@@ -62,6 +62,7 @@ export function openDb(dbPath: string): Database.Database {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       sequence_id INTEGER,
+      source TEXT NOT NULL DEFAULT 'cli' CHECK (source IN ('cli', 'voice')),
       FOREIGN KEY (depends_on) REFERENCES tasks (id) ON DELETE SET NULL
     );
 
@@ -198,6 +199,10 @@ export function openDb(dbPath: string): Database.Database {
         )
         WHERE sequence_id IS NULL
       `);
+    }
+    const hasSourceColumn = tableInfo.some(col => col.name === 'source');
+    if (!hasSourceColumn) {
+      db.exec("ALTER TABLE tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'cli' CHECK (source IN ('cli', 'voice'))");
     }
   }
 

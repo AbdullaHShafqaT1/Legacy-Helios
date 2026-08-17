@@ -36,8 +36,13 @@ Commands:
   approve <taskId>
     Approves pending Unattended Approval requests for the specified task ID.
 
-  briefing
+  briefing [--read-aloud]
     Generates an LLM summary of yesterday's completed tasks.
+    Flags:
+      --read-aloud            Reads the briefing aloud using TTS.
+
+  listen
+    Starts the local voice assistant in continuously listening mode.
 
   help
     Prints this help message.
@@ -77,7 +82,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -136,6 +141,7 @@ async function run(): Promise<void> {
         priority,
         dependsOn,
         maxRetries,
+        source: 'cli',
       });
 
       console.log(`Task submitted successfully. ID: ${task.id} [Status: ${task.status}]`);
@@ -267,6 +273,61 @@ async function run(): Promise<void> {
       console.log('\n--- DAILY BRIEFING ---\n');
       console.log(res.text);
       console.log('\n----------------------\n');
+
+      if (flags['read-aloud']) {
+        const { VoiceManager } = await import('../../core/src/voice/VoiceManager.js');
+        const { LocalAudioEngine } = await import('../../core/src/voice/engines/LocalAudioEngine.js');
+        const engine = new LocalAudioEngine(ctx.logger);
+        const voiceManager = new VoiceManager(engine, ctx.logger, {
+          sttConfidenceThreshold: 0.8,
+          wakeWordSensitivity: 0.5,
+        });
+        await voiceManager.init();
+        console.log('Reading briefing aloud...');
+        await voiceManager.speak(res.text);
+      }
+    } else if (command === 'listen') {
+      const { VoiceManager } = await import('../../core/src/voice/VoiceManager.js');
+      // For demonstration in CLI without real hardware by default, we can use LocalAudioEngine
+      // but it will fail fast if Python isn't available. In a real environment, it would run.
+      // If we are in test mode, we'd use MockAudioEngine. We'll try Local.
+      let engine: any;
+      try {
+        const { LocalAudioEngine } = await import('../../core/src/voice/engines/LocalAudioEngine.js');
+        engine = new LocalAudioEngine(ctx.logger);
+        await engine.init();
+      } catch (e: any) {
+        ctx.logger.warn({ err: e }, 'LocalAudioEngine unavailable, falling back to MockAudioEngine for demonstration.');
+        const { MockAudioEngine } = await import('../../core/src/voice/engines/MockAudioEngine.js');
+        engine = new MockAudioEngine();
+        await engine.init();
+      }
+
+      const voiceManager = new VoiceManager(engine, ctx.logger, {
+        sttConfidenceThreshold: 0.8,
+        wakeWordSensitivity: 0.5,
+      });
+
+      // EXACT SAME submission path as 'submit'
+      voiceManager.on('command', (text: string) => {
+        try {
+          const task = ctx!.queue.enqueue({
+            description: text,
+            source: 'voice',
+          });
+          console.log(`[Voice] Task submitted successfully. ID: ${task.id} [Status: ${task.status}]`);
+          voiceManager.speak("Task submitted.").catch(() => {});
+        } catch (e: any) {
+          console.error(`[Voice] Failed to submit task: ${e.message}`);
+          voiceManager.speak("I'm sorry, I couldn't submit that task.").catch(() => {});
+        }
+      });
+
+      await voiceManager.init();
+      console.log('Jarvis is now listening. Say the wake word to interact.');
+      
+      // Keep process alive
+      process.stdin.resume();
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);

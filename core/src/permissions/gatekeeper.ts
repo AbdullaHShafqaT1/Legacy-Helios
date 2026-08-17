@@ -91,7 +91,14 @@ export class PermissionGatekeeper {
     const isRoleAllowed = Boolean(policy && policy.allowedActions.includes(action as GuardedAction));
 
     if (!isRoleAllowed) {
-      const correlationId = this.auditLog.recordDecision({
+      const correlationId = this.auditLog.recordRequest({
+        actor: request.actor,
+        action: action,
+        params: request.params,
+      });
+
+      this.auditLog.recordDecision({
+        correlationId,
         actor: request.actor,
         action: action,
         params: request.params,
@@ -151,7 +158,7 @@ export class PermissionGatekeeper {
         approvalStatus: denialReason === 'pending-approval' ? 'pending' : (granted ? 'granted' : 'denied'),
         approver
       });
-      return { granted, correlationId, denialReason };
+      return { granted, correlationId, denialReason, approver };
     };
 
     if (isAutoApproved) {
@@ -164,7 +171,10 @@ export class PermissionGatekeeper {
 
     // Step 2b: Interactive / High-Friction Prompt check
     const context = executionContext.getStore();
-    if (config.unattended && context && context.taskId) {
+    const taskSource = context?.taskId ? this.auditLog.getTaskSource(context.taskId) : null;
+    const isUnattendedMode = config.unattended || taskSource === 'voice';
+
+    if (isUnattendedMode && context && context.taskId) {
       const payload = { ...request, action };
       const pendingStatus = this.auditLog.getPendingApprovalStatus(context.taskId, payload);
 

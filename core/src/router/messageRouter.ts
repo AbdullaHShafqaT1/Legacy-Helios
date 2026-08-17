@@ -79,7 +79,7 @@ export class MessageRouter {
     };
 
     // 1. Audit log message send event (decision before execution)
-    const correlationId = this.auditLog.recordDecision({
+    const correlationId = this.auditLog.recordRequest({
       actor: message.sender,
       action: 'message-send',
       params: {
@@ -89,6 +89,12 @@ export class MessageRouter {
         actingOnBehalfOf: message.actingOnBehalfOf,
         correlationId: message.correlationId,
       },
+    });
+
+    this.auditLog.recordDecision({
+      correlationId,
+      actor: message.sender,
+      action: 'message-send',
       approvalStatus: 'granted',
       approver: 'system',
     });

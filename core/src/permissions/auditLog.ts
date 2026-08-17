@@ -163,4 +163,12 @@ export class AuditLog {
     
     return (row?.status as 'pending' | 'granted' | 'denied') || null;
   }
+
+  /**
+   * Gets the source of a task by ID.
+   */
+  getTaskSource(taskId: string): 'cli' | 'voice' | null {
+    const row = this.db.prepare('SELECT source FROM tasks WHERE id = ?').get(taskId) as { source: string } | undefined;
+    return (row?.source as 'cli' | 'voice') || null;
+  }
 }
