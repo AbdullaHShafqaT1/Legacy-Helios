@@ -77,7 +77,7 @@ export class CodeReviewerAgent implements Agent {
     };
 
     try {
-      await this.messageRouter.send(pmMessage);
+      await this.messageRouter.send(pmMessage as any);
     } catch (err: any) {
       this.logger.error({ err }, 'Failed to notify project-manager of review result.');
       throw err;

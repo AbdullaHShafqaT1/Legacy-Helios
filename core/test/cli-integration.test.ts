@@ -45,8 +45,10 @@ describe('CLI Integration Data & Process Tests', () => {
       });
 
       // Write decision logs
-      const correlationId = ctx.auditLog.recordDecision({
-        actor: 'cli',
+      const correlationId = 'test-cli-corr-123';
+      ctx.auditLog.recordDecision({
+        correlationId,
+        actor: 'cli' as any,
         action: 'emergency-stop',
         params: { test: 'value' },
         approvalStatus: 'n-a',

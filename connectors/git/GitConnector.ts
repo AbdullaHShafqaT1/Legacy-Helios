@@ -320,7 +320,7 @@ export class GitConnector {
     options?: { all?: boolean }
   ): Promise<GitOperationResult> {
     const authorization = await this.gatekeeper.authorize({
-      actor,
+      actor: actor as any,
       action: 'git-operation',
       params: {
         operation: 'commit',
@@ -395,7 +395,7 @@ export class GitConnector {
     branch?: string
   ): Promise<GitOperationResult> {
     const authorization = await this.gatekeeper.authorize({
-      actor,
+      actor: actor as any,
       action: 'git-operation',
       params: {
         operation: 'push',
@@ -469,7 +469,7 @@ export class GitConnector {
     forceFlag: '--force' | '--force-with-lease' = '--force-with-lease'
   ): Promise<GitOperationResult> {
     const authorization = await this.gatekeeper.authorize({
-      actor,
+      actor: actor as any,
       action: 'git-force-push',
       params: {
         operation: 'force-push',
@@ -547,7 +547,7 @@ export class GitConnector {
     targetRef = 'HEAD'
   ): Promise<GitOperationResult> {
     const authorization = await this.gatekeeper.authorize({
-      actor,
+      actor: actor as any,
       action: 'git-history-rewrite',
       params: {
         operation: 'reset-hard',

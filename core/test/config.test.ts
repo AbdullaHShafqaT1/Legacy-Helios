@@ -40,13 +40,13 @@ describe('Configuration Loader', () => {
   });
 
   it('should not throw if ANTHROPIC_API_KEY is missing and requireApiKey is false', () => {
-    expect(() => loadConfig(false)).not.toThrow();
-    const config = loadConfig(false);
+    expect(() => loadConfig(false) as any).not.toThrow();
+    const config = loadConfig(false) as any;
     expect(config.anthropicApiKey).toBeUndefined();
   });
 
   it('should apply documented defaults for optional variables', () => {
-    const config = loadConfig(false);
+    const config = loadConfig(false) as any;
     expect(config.dbPath).toBe('memory-store/jarvis.db');
     expect(config.model).toBe('claude-sonnet-4-6');
     expect(config.maxRetries).toBe(3);
@@ -86,7 +86,7 @@ describe('Configuration Loader', () => {
     process.env.JARVIS_VECTOR_STORE_TYPE = 'local-sqlite';
     process.env.JARVIS_EMBEDDING_DIMENSIONS = '1536';
 
-    const config = loadConfig(false);
+    const config = loadConfig(false) as any;
     expect(config.vectorStorePath).toBe('custom/vectors.db');
     expect(config.vectorStoreType).toBe('local-sqlite');
     expect(config.embeddingDimensions).toBe(1536);
@@ -94,26 +94,26 @@ describe('Configuration Loader', () => {
 
   it('should parse memory retention limits when provided', () => {
     process.env.JARVIS_MEMORY_MAX_ENTRIES = '500';
-    const config = loadConfig(false);
+    const config = loadConfig(false) as any;
     expect(config.memoryMaxEntries).toBe(500);
   });
 
   it('should throw ConfigError if numeric variables are invalid numbers', () => {
     process.env.JARVIS_MAX_RETRIES = 'not-a-number';
-    expect(() => loadConfig(false)).toThrow(ConfigError);
+    expect(() => loadConfig(false) as any).toThrow(ConfigError);
   });
 
   it('should throw ConfigError if JARVIS_EMBEDDING_DIMENSIONS is invalid or non-positive', () => {
     process.env.JARVIS_EMBEDDING_DIMENSIONS = '-10';
-    expect(() => loadConfig(false)).toThrow(ConfigError);
+    expect(() => loadConfig(false) as any).toThrow(ConfigError);
   });
 
   it('should throw ConfigError if JARVIS_MEMORY_MAX_ENTRIES is invalid or non-positive', () => {
     process.env.JARVIS_MEMORY_MAX_ENTRIES = 'not-a-number';
-    expect(() => loadConfig(false)).toThrow(ConfigError);
+    expect(() => loadConfig(false) as any).toThrow(ConfigError);
     clearConfigCache();
     process.env.JARVIS_MEMORY_MAX_ENTRIES = '-5';
-    expect(() => loadConfig(false)).toThrow(ConfigError);
+    expect(() => loadConfig(false) as any).toThrow(ConfigError);
   });
 
   it('should cache the loaded configuration and not re-read process.env', () => {

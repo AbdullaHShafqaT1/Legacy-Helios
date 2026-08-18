@@ -44,21 +44,24 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **6.3** | Browser Concurrency: Process-level AsyncLocalStorage implemented to inject distinct `taskId` contexts into `BrowserConnector`, ensuring task isolation. | **COMPLETE** |
 | **6.4** | Per-OS CI matrix: `ubuntu-latest`, `windows-latest`, and `macos-latest` workflows added to GitHub actions and verified. | **COMPLETE** |
 | **6.5** | Real-Restart Resumption Simulation: Extracted orchestration loops. Simulated task resumption with cross-process test scripts due to daemon architectural limitations. | **PARTIAL** |
+| **7.1** | Wake Word Detection: Continuous listening local wake-word engine ("Hey Jarvis", "Jarvis", "Wake up"). | **COMPLETE** |
+| **7.2** | Local Speech-to-Text: Local Whisper.cpp integration, with confidence thresholding and clarification logic. | **COMPLETE** |
+| **7.3** | Local Text-to-Speech: Local Piper engine integration, Daily Briefing `--read-aloud` command. | **COMPLETE** |
+| **7.4** | Conversational Interruption (Barge-in): Wake word or interrupt key cancels TTS output instantly and switches to listening. | **COMPLETE** |
+| **7.5** | Voice-to-Task Bridge & Hardened Gating: Submitted voice tasks run inside core orchestrator under `source: 'voice'`. Active prompts bypass interactive CLI input and are forced to unattended approval queue (`pending-approval`). | **COMPLETE** |
 
 ### Total Project Test Count:
-**174 tests** pass successfully across **30 test files** inside the repository.
+**185 tests** pass successfully across **32 test files** inside the repository.
 
 ---
 
-## 🚫 Scope Exclusions (What Phases 1–5 DO NOT Include)
+## 🚫 Scope Exclusions (What Jarvis DOES NOT Include)
 
 Consistent with the master charter specifications, the following architectural elements remain excluded:
-- **No Voice Interface**: No speech recognition or speech synthesis.
 - **No Additional Agent Personas**: Only `software-engineer`, `researcher`, `code-reviewer`, `project-manager`, `browser-operator`, and `terminal-operator` agents are present.
 - **No External/Dynamic Vector Databases**: ChromaDB, Pinecone, or Milvus are excluded; memory relies strictly on a local-first SQLite file vector database (type `'sqlite-json-cosine'`).
 - **No Multi-Agent Swarm Communications via External Brokers**: Events and schedules run strictly in-process; Redis/NATS brokers are excluded.
 - **No Electron/GUI**: Operation is restricted strictly to terminal TTY command lines.
-- **No Linux/macOS CI Matrix**: Host machines run scripts directly on Windows; cross-platform CI matrix testing is deferred to Phase 6.
 
 ---
 
@@ -113,26 +116,29 @@ A future developer picking up work after Phase 5 should review these technical d
 6. **Terminal Secrets Redaction Coverage**: Stdout/stderr secrets redaction in `TerminalConnector` relies on the same regex shapes as `redactSecrets`. Advanced credential shapes or multi-line secrets spanning chunk boundaries may not be caught.
 7. **Browser Headless-Only**: `BrowserConnector` always runs Playwright in headless mode (configurable via `JARVIS_BROWSER_HEADLESS`). Non-headless (visible) browser automation is possible via config but not tested.
 8. **Real-Restart Test (Objective 2 Limitation):** The `resumption.test.ts` does not execute an end-to-end true OS-level process boundary traversal test (i.e., launching the entire Orchestrator daemon via `child_process`, halting it via `SIGKILL` while a task is mid-flight, respawning it, and asserting recovery). The current test acts as an in-memory simulation that isolates DB operations via a child process merely to construct stale state. Writing a full multi-process daemon harness is deferred, and this remains an accepted limitation of the testing suite for Phase 6.
+9. **Voice Pipeline Hardware Verification**: Automated E2E test suites mock hardware input and output (wake word detection, STT transcription, barge-in, and Gatekeeper approval redirection). Running on physical devices with real microphone/speaker hardware requires a local Python environment with libraries installed (openwakeword, whisper.cpp, piper), which is supported and verified on direct Windows devices but bypassed in CI pipelines.
 
 ---
 
-## 🏁 Carry-Forward Item Resolution (Through Phase 5)
+## 🏁 Carry-Forward & Deferred Item Resolution Ledger
 
-The table below provides the authoritative final resolution status for all carry-forward items and deferred technical debts from the master charter:
+The table below provides the authoritative final resolution status for all carry-forward items and deferred technical debts tracked since the master charter:
 
 | Carry-Forward Item | Final Status | Resolution / Justification |
 | :--- | :--- | :--- |
-| **1. Same-millisecond task ordering bug** | **RESOLVED** | Monotonic `sequence_id` database column added in Sub-task 2.1; `claimNext` sorts by `priority DESC, sequence_id ASC` (FIFO), and `listAll` sorts by `sequence_id DESC` (newest first). |
-| **2. Readline Gatekeeper approval test coverage** | **RESOLVED** | Full interactive test coverage (approve, deny, timeout) added in Sub-task 2.1; expanded in 2.2 and 2.5 for role-based policies and high-friction confirmation prompts. |
-| **3. CI pipeline automation** | **RESOLVED** | GitHub Actions CI workflow added in Sub-task 2.6 (`.github/workflows/ci.yml`) running clean dependency install, typechecking (`npx tsc --noEmit`), and full Vitest suite (`npm test`). |
-| **4. Double-scheduleNext polling redundancy** | **RESOLVED** | Inspected in 2.1 and confirmed harmless (idempotent timeout re-arming in `agentRouter.ts`); retained as documented transition behavior. |
+| **1. Same-millisecond task ordering bug** | **RESOLVED (Phase 2)** | Monotonic `sequence_id` database column added in Sub-task 2.1; `claimNext` sorts by `priority DESC, sequence_id ASC` (FIFO), and `listAll` sorts by `sequence_id DESC` (newest first). |
+| **2. Readline Gatekeeper approval test coverage** | **RESOLVED (Phase 2)** | Full interactive test coverage (approve, deny, timeout) added in Sub-task 2.1; expanded in 2.2 and 2.5 for role-based policies and high-friction confirmation prompts. |
+| **3. CI pipeline automation** | **RESOLVED (Phase 2)** | GitHub Actions CI workflow added in Sub-task 2.6 (`.github/workflows/ci.yml`) running clean dependency install, typechecking (`npx tsc --noEmit`), and full Vitest suite (`npm test`). |
+| **4. Double-scheduleNext polling redundancy** | **RESOLVED (Phase 2)** | Inspected in 2.1 and confirmed harmless (idempotent timeout re-arming in `agentRouter.ts`); retained as documented transition behavior. |
 | **5. Claude API connection timeout** | **RESOLVED (Phase 6)** | Custom AbortController implementation applied to Anthropic fetch calls for reliable timeouts. |
-| **6. Local model runtime (Ollama)** | **STILL DEFERRED** | Local LLM serving via Ollama deferred to future offline requirement phase. |
-| **7. Cross-platform verification (Linux/macOS)** | **RESOLVED (Phase 6)** | `.github/workflows/ci.yml` expanded to include `ubuntu-latest`, `macos-latest`, and `windows-latest` matrices. Tested clean across all. |
-| **8. Linear-scan search complexity at scale** | **DEFERRED** | Cosine similarity is computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW or tree indexes) is deferred. |
-| **9. Secrets pattern matching regex gaps** | **DEFERRED (Phase 6)** | Redaction scanner relies on basic regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
-| **10. Browser automation** | **RESOLVED (Phase 5)** | `BrowserConnector` and `BrowserOperatorAgent` implemented with full gated risk-tier taxonomy, local-URL blocking, and allowlist enforcement. |
-| **11. Terminal operator** | **RESOLVED (Phase 5)** | `TerminalConnector` and `TerminalOperatorAgent` implemented with path scoping, allowlist pre-approval, timeout, clean process-tree kill, and secrets redaction. |
+| **6. Cross-platform verification (Linux/macOS)** | **RESOLVED (Phase 6)** | `.github/workflows/ci.yml` expanded to include `ubuntu-latest`, `macos-latest`, and `windows-latest` matrices. Tested clean across all. |
+| **7. Browser automation** | **RESOLVED (Phase 5)** | `BrowserConnector` and `BrowserOperatorAgent` implemented with full gated risk-tier taxonomy, local-URL blocking, and allowlist enforcement. |
+| **8. Terminal operator** | **RESOLVED (Phase 5)** | `TerminalConnector` and `TerminalOperatorAgent` implemented with path scoping, allowlist pre-approval, timeout, clean process-tree kill, and secrets redaction. |
+| **9. Real OS-level process-boundary restart** | **ACCEPTED LIMITATION** | `resumption.test.ts` simulates task recovery across mock boundary transitions; true process-boundary daemon halt/recovery is tracked for Phase 8 reassessment. |
+| **10. `browser-admin` promptable-tier design** | **STILL DEFERRED** | Deferred due to lack of immediate production need for automated browser admin elevation hooks. |
+| **11. Ollama/local model route** | **STILL DEFERRED** | Local LLM serving via Ollama deferred to future offline requirements. (Note: Phase 7 speech stack is local, but local LLM is not). |
+| **12. Linear-scan vector search cost at scale** | **STILL DEFERRED** | Cosine similarity computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW) is deferred. |
+| **13. Secrets pattern matching regex gaps** | **STILL DEFERRED** | Redaction scanner relies on regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
 
 ---
 

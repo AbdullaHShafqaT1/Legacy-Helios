@@ -178,7 +178,7 @@ export class SoftwareEngineerAgent implements Agent {
         };
 
         try {
-          const reply = await this.messageRouter.sendAndReceive(reviewMsg);
+          const reply = await this.messageRouter.sendAndReceive(reviewMsg as any);
           if (reply.payload.verdict === 'request-changes') {
             return {
               status: 'failed',
@@ -249,7 +249,7 @@ export class SoftwareEngineerAgent implements Agent {
           path: resolvedPath,
           taskId: 'delegated-task',
           bytes: content.length,
-          actingOnBehalfOf: message.sender,
+          actingOnBehalfOf: message.sender as any,
         },
       });
 

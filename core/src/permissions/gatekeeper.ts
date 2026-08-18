@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Logger } from 'pino';
 import { AuditLog } from './auditLog.js';
 import { redactSecrets } from '../lib/redact.js';
@@ -91,11 +92,7 @@ export class PermissionGatekeeper {
     const isRoleAllowed = Boolean(policy && policy.allowedActions.includes(action as GuardedAction));
 
     if (!isRoleAllowed) {
-      const correlationId = this.auditLog.recordRequest({
-        actor: request.actor,
-        action: action,
-        params: request.params,
-      });
+      const correlationId = crypto.randomUUID();
 
       this.auditLog.recordDecision({
         correlationId,
@@ -149,14 +146,14 @@ export class PermissionGatekeeper {
       params: request.params
     });
 
-    const finish = (granted: boolean, denialReason?: PermissionDecision['denialReason'], approver: 'system' | 'user' | 'policy' | null = null): PermissionDecision => {
+    const finish = (granted: boolean, denialReason?: PermissionDecision['denialReason'], approver?: PermissionDecision['approver']): PermissionDecision => {
       this.auditLog.recordDecision({
         correlationId,
         actor: request.actor,
         action: request.action as string,
         params: request.params,
         approvalStatus: denialReason === 'pending-approval' ? 'pending' : (granted ? 'granted' : 'denied'),
-        approver
+        approver: approver || null
       });
       return { granted, correlationId, denialReason, approver };
     };

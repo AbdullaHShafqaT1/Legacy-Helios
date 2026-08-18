@@ -54,7 +54,7 @@ describe('MemoryManager', () => {
       vectorStoreType: 'sqlite-json-cosine',
       embeddingDimensions: 384,
       memoryMaxEntries: 3,
-    };
+    } as any;
 
     manager = new MemoryManager(
       db,

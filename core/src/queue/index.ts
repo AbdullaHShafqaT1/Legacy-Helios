@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
 import { JarvisEventBus } from '../events/bus.js';
-import * as cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 
 /**
  * Custom error thrown by the TaskQueue class.
@@ -369,7 +369,7 @@ export class TaskQueue {
 
     try {
       // Validate cron expression
-      cronParser.parseExpression(input.scheduleExpression);
+      CronExpressionParser.parse(input.scheduleExpression);
     } catch (err: any) {
       throw new TaskQueueError(`Invalid cron expression: ${err.message}`);
     }
@@ -415,7 +415,7 @@ export class TaskQueue {
 
     for (const st of scheduledTasks) {
       try {
-        const interval = cronParser.parseExpression(st.schedule_expression, {
+        const interval = CronExpressionParser.parse(st.schedule_expression, {
           currentDate: st.next_run_at ? new Date(st.next_run_at) : now,
         });
 

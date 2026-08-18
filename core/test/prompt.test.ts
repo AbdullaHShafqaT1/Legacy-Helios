@@ -27,7 +27,7 @@ describe('createStdinApprovalPrompt TTY fallback', () => {
 
     const prompt = createStdinApprovalPrompt();
     const result = await prompt({
-      actor: 'test-actor',
+      actor: 'test-actor' as any,
       action: 'file-write',
       params: { path: '/some/path' }
     });

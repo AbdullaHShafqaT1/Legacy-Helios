@@ -88,7 +88,7 @@ describe('TerminalConnector Unit Tests', () => {
     expect(callArg.action).toBe('terminal-run');
     // Gatekeeper should grant it as policy/pre-approved
     const decision = await gatekeeper.authorize({
-      actor: 'terminal-operator',
+      actor: 'terminal-operator' as any,
       action: 'terminal-run',
       params: { command: 'ls' },
     });
@@ -99,7 +99,7 @@ describe('TerminalConnector Unit Tests', () => {
   it('should route non-allowlisted commands to high-friction confirmation tier', async () => {
     mockHighFrictionPrompt.mockResolvedValue(true);
     const decision = await gatekeeper.authorize({
-      actor: 'terminal-operator',
+      actor: 'terminal-operator' as any,
       action: 'terminal-run',
       params: { command: 'rm -rf /' },
     });

@@ -85,7 +85,7 @@ describe('FilesystemConnector Class', () => {
 
     // Check audit log
     const recent = auditLog.recent();
-    expect(recent).toHaveLength(2); // decision + outcome
+    expect(recent).toHaveLength(3); // request + decision + outcome
     expect(recent[0].event_type).toBe('outcome');
     expect(recent[0].outcome).toContain('success — wrote 16 bytes');
   });

@@ -41,7 +41,7 @@ describe('Unattended Approval Queue logic', () => {
     await executionContext.run({ taskId: 'test-unattended' }, async () => {
       // 1. Initial request should be denied and queued for pending approval
       const result1 = await gatekeeper.authorize({
-        actor: 'software-engineer',
+        actor: 'software-engineer' as any,
         action: 'file-write',
         params: { path: '/tmp/test.txt' },
       });
@@ -59,7 +59,7 @@ describe('Unattended Approval Queue logic', () => {
 
       // 3. Next request should be auto-approved
       const result2 = await gatekeeper.authorize({
-        actor: 'software-engineer',
+        actor: 'software-engineer' as any,
         action: 'file-write',
         params: { path: '/tmp/test.txt' },
       });

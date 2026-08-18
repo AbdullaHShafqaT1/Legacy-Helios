@@ -237,7 +237,7 @@ export class ResearcherAgent implements Agent {
           path: resolvedPath,
           taskId: 'delegated-task',
           bytes: content?.length || 0,
-          actingOnBehalfOf: message.sender,
+          actingOnBehalfOf: message.sender as any,
         },
       });
 

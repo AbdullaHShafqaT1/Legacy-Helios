@@ -48,7 +48,7 @@ describe('BrowserConnector Gating & Guttering Unit Tests', () => {
 
   it('should auto-approve browser-read on external URLs', async () => {
     const decision = await gatekeeper.authorize({
-      actor: 'browser-operator',
+      actor: 'browser-operator' as any,
       action: 'browser-read',
       params: { url: 'https://example.com' },
     });
@@ -59,7 +59,7 @@ describe('BrowserConnector Gating & Guttering Unit Tests', () => {
   it('should elevate and block local resource URLs by default', async () => {
     // localhost should map to browser-admin which is not allowed by policy
     const decision = await gatekeeper.authorize({
-      actor: 'browser-operator',
+      actor: 'browser-operator' as any,
       action: 'browser-read',
       params: { url: 'http://localhost:8080' },
     });
@@ -70,7 +70,7 @@ describe('BrowserConnector Gating & Guttering Unit Tests', () => {
 
   it('should elevate and block file:// URLs by default', async () => {
     const decision = await gatekeeper.authorize({
-      actor: 'browser-operator',
+      actor: 'browser-operator' as any,
       action: 'browser-read',
       params: { url: 'file:///etc/passwd' },
     });
@@ -84,7 +84,7 @@ describe('BrowserConnector Gating & Guttering Unit Tests', () => {
 
     // Since we cleared cache, gatekeeper will load new allowlist
     const decision = await gatekeeper.authorize({
-      actor: 'browser-operator',
+      actor: 'browser-operator' as any,
       action: 'browser-read',
       params: { url: 'http://localhost:8080' },
     });

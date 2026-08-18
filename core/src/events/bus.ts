@@ -5,6 +5,7 @@ export interface JarvisEvents {
   'task:started': { taskId: string; agent: string };
   'task:completed': { taskId: string };
   'task:failed': { taskId: string; error: string; willRetry: boolean };
+  'task:paused': { taskId: string };
   'queue:emergency-stop': Record<string, never> | void;
 }
 

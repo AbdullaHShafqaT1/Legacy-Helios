@@ -15,18 +15,16 @@ describe('AuditLog Class', () => {
     db.close();
   });
 
-  it('should insert exactly one decision row and return a correlation ID', () => {
-    const correlationId = auditLog.recordDecision({
-      actor: 'test-actor',
+  it('should insert exactly one decision row', () => {
+    const correlationId = 'test-corr-123';
+    auditLog.recordDecision({
+      correlationId,
+      actor: 'test-actor' as any,
       action: 'file-write',
       params: { path: 'test.txt' },
       approvalStatus: 'granted',
       approver: 'system'
     });
-
-    expect(correlationId).toBeDefined();
-    expect(typeof correlationId).toBe('string');
-    expect(correlationId.length).toBeGreaterThan(0);
 
     const rows = auditLog.recent();
     expect(rows).toHaveLength(1);
@@ -56,8 +54,10 @@ describe('AuditLog Class', () => {
   });
 
   it('should redact params passed to recordDecision before writing to the database', () => {
-    const correlationId = auditLog.recordDecision({
-      actor: 'test-actor',
+    const correlationId = 'test-corr-redact';
+    auditLog.recordDecision({
+      correlationId,
+      actor: 'test-actor' as any,
       action: 'file-write',
       params: { path: 'test.txt', apiKey: 'sk-ant-leakkey', token: 'secret-token', safeField: 'all-clear' },
       approvalStatus: 'granted',
@@ -81,8 +81,10 @@ describe('AuditLog Class', () => {
 
   it('should return recent rows newest-first and respect the limit argument', () => {
     // Write 3 records
-    const c1 = auditLog.recordDecision({ actor: 'a1', action: 'write', approvalStatus: 'granted', approver: 'user' });
-    const c2 = auditLog.recordDecision({ actor: 'a2', action: 'delete', approvalStatus: 'denied', approver: 'user' });
+    const c1 = 'c1-id';
+    const c2 = 'c2-id';
+    auditLog.recordDecision({ correlationId: c1, actor: 'a1' as any, action: 'write', approvalStatus: 'granted', approver: 'user' });
+    auditLog.recordDecision({ correlationId: c2, actor: 'a2' as any, action: 'delete', approvalStatus: 'denied', approver: 'user' });
     auditLog.recordOutcome(c1, 'a1', 'write', 'Done');
 
     // recent() should return newest first: outcome for c1 (id 3), decision c2 (id 2), decision c1 (id 1)

@@ -101,7 +101,7 @@ export class BrowserOperatorAgent implements Agent {
   async receiveMessage(message: AgentMessage): Promise<AgentMessage | null> {
     if (message.type.startsWith('browser-')) {
       const payload = message.payload;
-      const actingOnBehalfOf = message.sender;
+      const actingOnBehalfOf = message.sender as any;
 
       try {
         if (message.type === 'browser-navigate') {

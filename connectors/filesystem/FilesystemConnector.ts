@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { Logger } from 'pino';
 import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
@@ -108,7 +109,9 @@ export class FilesystemConnector {
   }
 
   private recordTraversalViolation(actor: AgentRole, actionName: string, targetPath: string, resolvedTarget: string): void {
-    const correlationId = this.auditLog.recordDecision({
+    const correlationId = crypto.randomUUID();
+    this.auditLog.recordDecision({
+      correlationId,
       actor,
       action: actionName,
       params: { targetPath, resolvedTarget, projectRoot: this.projectRoot, violation: 'path-traversal-attempt' },

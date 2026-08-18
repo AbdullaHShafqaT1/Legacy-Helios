@@ -204,7 +204,9 @@ async function run(): Promise<void> {
 
       fs.writeFileSync(stopSignalPath, new Date().toISOString(), 'utf8');
 
-      const correlationId = ctx.auditLog.recordDecision({
+      const correlationId = 'stop-' + Date.now();
+      ctx.auditLog.recordDecision({
+        correlationId,
         actor: 'cli',
         action: 'emergency-stop',
         params: { stopSignalPath },
@@ -240,7 +242,7 @@ async function run(): Promise<void> {
         console.log(`No pending approvals found for task: ${taskId}`);
       }
     } else if (command === 'briefing') {
-      const { ClaudeConnector } = await import('../../connectors/claude-api/ClaudeConnector.js');
+      const { ClaudeConnector } = await import('../connectors/claude-api/ClaudeConnector.js');
       const claude = new ClaudeConnector({
         apiKey: ctx.config.anthropicApiKey!,
         model: ctx.config.model,
@@ -268,15 +270,15 @@ async function run(): Promise<void> {
       const res = await claude.invoke({
         taskId: 'briefing',
         description: prompt,
-      });
+      } as any);
       
       console.log('\n--- DAILY BRIEFING ---\n');
       console.log(res.text);
       console.log('\n----------------------\n');
 
       if (flags['read-aloud']) {
-        const { VoiceManager } = await import('../../core/src/voice/VoiceManager.js');
-        const { LocalAudioEngine } = await import('../../core/src/voice/engines/LocalAudioEngine.js');
+        const { VoiceManager } = await import('../core/src/voice/VoiceManager.js');
+        const { LocalAudioEngine } = await import('../core/src/voice/engines/LocalAudioEngine.js');
         const engine = new LocalAudioEngine(ctx.logger);
         const voiceManager = new VoiceManager(engine, ctx.logger, {
           sttConfidenceThreshold: 0.8,
@@ -287,18 +289,18 @@ async function run(): Promise<void> {
         await voiceManager.speak(res.text);
       }
     } else if (command === 'listen') {
-      const { VoiceManager } = await import('../../core/src/voice/VoiceManager.js');
+      const { VoiceManager } = await import('../core/src/voice/VoiceManager.js');
       // For demonstration in CLI without real hardware by default, we can use LocalAudioEngine
       // but it will fail fast if Python isn't available. In a real environment, it would run.
       // If we are in test mode, we'd use MockAudioEngine. We'll try Local.
       let engine: any;
       try {
-        const { LocalAudioEngine } = await import('../../core/src/voice/engines/LocalAudioEngine.js');
+        const { LocalAudioEngine } = await import('../core/src/voice/engines/LocalAudioEngine.js');
         engine = new LocalAudioEngine(ctx.logger);
         await engine.init();
       } catch (e: any) {
         ctx.logger.warn({ err: e }, 'LocalAudioEngine unavailable, falling back to MockAudioEngine for demonstration.');
-        const { MockAudioEngine } = await import('../../core/src/voice/engines/MockAudioEngine.js');
+        const { MockAudioEngine } = await import('../core/src/voice/engines/MockAudioEngine.js');
         engine = new MockAudioEngine();
         await engine.init();
       }

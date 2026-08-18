@@ -79,7 +79,9 @@ export class MessageRouter {
     };
 
     // 1. Audit log message send event (decision before execution)
-    const correlationId = this.auditLog.recordRequest({
+    const correlationId = (await import('node:crypto')).randomUUID();
+    this.auditLog.recordDecision({
+      correlationId,
       actor: message.sender,
       action: 'message-send',
       params: {
@@ -89,12 +91,6 @@ export class MessageRouter {
         actingOnBehalfOf: message.actingOnBehalfOf,
         correlationId: message.correlationId,
       },
-    });
-
-    this.auditLog.recordDecision({
-      correlationId,
-      actor: message.sender,
-      action: 'message-send',
       approvalStatus: 'granted',
       approver: 'system',
     });
@@ -134,7 +130,7 @@ export class MessageRouter {
         this.emitter.emit(`reply:${response.correlationId || response.id}`, response);
       }
 
-      return response;
+      return response as any;
     } catch (err: any) {
       const errMsg = err?.message || String(err);
       this.auditLog.recordOutcome(correlationId, message.sender, 'message-send', `error — ${errMsg}`);

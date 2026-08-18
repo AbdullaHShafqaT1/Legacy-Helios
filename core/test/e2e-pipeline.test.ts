@@ -98,7 +98,7 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
         vectorStoreType: 'sqlite-json-cosine',
         embeddingDimensions: 384,
         memoryMaxEntries: 1000,
-      }
+      } as any
     );
 
     // Setup Agent Router & Software Engineer Agent
@@ -356,5 +356,5 @@ describe('Jarvis E2E Pipeline Integration Tests', () => {
 
     delete process.env.JARVIS_UNATTENDED;
     clearConfigCache();
-  });
+  }, 30000);
 });

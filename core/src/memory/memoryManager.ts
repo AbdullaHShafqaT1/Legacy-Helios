@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
 import { Config } from '../lib/config.js';
-import { PermissionGatekeeper } from '../permissions/gatekeeper.js';
+import { PermissionGatekeeper, AgentRole } from '../permissions/gatekeeper.js';
 import { AuditLog } from '../permissions/auditLog.js';
 import { VectorStore } from './vectorStore.js';
 import { EmbeddingProvider } from './embeddingProvider.js';
@@ -123,7 +123,9 @@ export class MemoryManager {
     // 1. Redaction check (runs BEFORE embedding/storing)
     const matchedCategory = this.checkRedaction(content);
     if (matchedCategory) {
-      const correlationId = this.auditLog.recordRequest({
+      const correlationId = crypto.randomUUID();
+      this.auditLog.recordDecision({
+        correlationId,
         actor: sourceAgent,
         action: 'memory-write',
         params: {
@@ -131,12 +133,6 @@ export class MemoryManager {
           sourceTaskId,
           content: '[REDACTED - SENSITIVE CONTENT]'
         },
-      });
-
-      this.auditLog.recordDecision({
-        correlationId,
-        actor: sourceAgent,
-        action: 'memory-write',
         approvalStatus: 'denied',
         approver: 'system',
       });
@@ -153,7 +149,7 @@ export class MemoryManager {
 
     // 2. Permission Gatekeeper integration
     const permissionRequest = {
-      actor: sourceAgent,
+      actor: sourceAgent as AgentRole,
       action: 'memory-write',
       params: {
         tag,
@@ -266,7 +262,7 @@ export class MemoryManager {
   ): Promise<MemoryEntry[]> {
     // 1. Permission Gatekeeper integration for reads
     const permissionRequest = {
-      actor: actorAgent,
+      actor: actorAgent as AgentRole,
       action: 'memory-read',
       params: {
         text: text.slice(0, 100) + (text.length > 100 ? '...' : ''),
@@ -334,7 +330,7 @@ export class MemoryManager {
    */
   async getById(id: string, actorAgent = 'software-engineer'): Promise<MemoryEntry | null> {
     const permissionRequest = {
-      actor: actorAgent,
+      actor: actorAgent as AgentRole,
       action: 'memory-read',
       params: { id }
     };

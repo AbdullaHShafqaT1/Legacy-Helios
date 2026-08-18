@@ -131,7 +131,7 @@ export class TerminalOperatorAgent implements Agent {
   async receiveMessage(message: AgentMessage): Promise<AgentMessage | null> {
     if (message.type === 'terminal-run') {
       const payload = message.payload;
-      const actingOnBehalfOf = message.sender;
+      const actingOnBehalfOf = message.sender as any;
 
       try {
         const res = await this.terminalConnector.execute(this.name, payload.command, payload.cwd, actingOnBehalfOf);

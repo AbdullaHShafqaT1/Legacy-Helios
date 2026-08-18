@@ -195,8 +195,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should route message and deliver reply using correlationId', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'code-reviewer',
+        sender: 'software-engineer' as any,
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {
           taskId: 't-1',
@@ -216,8 +216,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
 
     it('should fail validation if message ID is missing', async () => {
       const request: any = {
-        sender: 'software-engineer',
-        recipient: 'code-reviewer',
+        sender: 'software-engineer' as any,
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -228,7 +228,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should fail validation if message sender is missing', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        recipient: 'code-reviewer',
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -239,7 +239,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should fail validation if message recipient is missing', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
+        sender: 'software-engineer' as any,
         type: 'review-request',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -250,8 +250,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should fail validation if message type is missing', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'code-reviewer',
+        sender: 'software-engineer' as any,
+        recipient: 'code-reviewer' as any,
         payload: {},
         timestamp: new Date().toISOString(),
       };
@@ -261,8 +261,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should fail validation if message timestamp is missing', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'code-reviewer',
+        sender: 'software-engineer' as any,
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {},
       };
@@ -272,8 +272,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should match reply correlationId with request ID as a standalone concern', async () => {
       const request: any = {
         id: 'req-uuid-12345',
-        sender: 'software-engineer',
-        recipient: 'code-reviewer',
+        sender: 'software-engineer' as any,
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {
           taskId: 't-1',
@@ -290,8 +290,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should throw error when routing to unregistered/nonexistent agent', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'unknown-agent',
+        sender: 'software-engineer' as any,
+        recipient: 'unknown-agent' as any,
         type: 'status-update',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -311,8 +311,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
 
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'silent-agent',
+        sender: 'software-engineer' as any,
+        recipient: 'silent-agent' as any,
         type: 'ping',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -332,7 +332,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
           // Send back to the sender
           return await messageRouter.send({
             id: crypto.randomUUID(),
-            sender: 'looper-agent',
+            sender: 'looper-agent' as any,
             recipient: msg.sender,
             type: 'ping',
             payload: {},
@@ -345,8 +345,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
 
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer',
-        recipient: 'looper-agent',
+        sender: 'software-engineer' as any,
+        recipient: 'looper-agent' as any,
         type: 'ping',
         payload: {},
         timestamp: new Date().toISOString(),
@@ -360,8 +360,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
     it('should detect message loops across real production agents (CodeReviewer and ProjectManager) and throw MessageLoopError', async () => {
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'project-manager',
-        recipient: 'code-reviewer',
+        sender: 'project-manager' as any,
+        recipient: 'code-reviewer' as any,
         type: 'review-request',
         payload: {
           taskId: 't-loop-test',
@@ -384,8 +384,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // Researcher (who does NOT have write permissions) sends Software Engineer a write-file-request message
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'researcher',
-        recipient: 'software-engineer',
+        sender: 'researcher' as any,
+        recipient: 'software-engineer' as any,
         type: 'write-file-request',
         payload: { path: filePath, content },
         timestamp: new Date().toISOString(),
@@ -414,8 +414,8 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
 
       const request: any = {
         id: crypto.randomUUID(),
-        sender: 'software-engineer', // sender has permission
-        recipient: 'researcher', // recipient doesn't have permission
+        sender: 'software-engineer' as any, // sender has permission
+        recipient: 'researcher' as any, // recipient doesn't have permission
         type: 'write-file-request',
         payload: { path: path.join(tempDir, 'failed_delegation.txt'), content: 'fail' },
         timestamp: new Date().toISOString(),

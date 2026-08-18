@@ -119,7 +119,7 @@ describe('Phase 2 Cross-Agent & Researcher Integration Suite', () => {
         vectorStoreType: 'sqlite-json-cosine',
         embeddingDimensions: 384,
         memoryMaxEntries: 1000,
-      }
+      } as any
     );
 
     researcherAgent = new ResearcherAgent(modelRouter, filesystemConnector, memoryManager, logger);

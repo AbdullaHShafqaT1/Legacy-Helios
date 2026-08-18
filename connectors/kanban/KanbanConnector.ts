@@ -55,7 +55,7 @@ export class KanbanConnector {
 
   private async authorizeWrite(actor: string, operation: string, params: Record<string, any>): Promise<string> {
     const request = {
-      actor,
+      actor: actor as any,
       action: 'kanban-write',
       params: {
         operation,

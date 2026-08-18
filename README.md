@@ -314,11 +314,41 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 * `approval_status`: `'granted'`
 * `params_json`: `{"path":"/workspace/code.js","bytes":42,"actingOnBehalfOf":"researcher"}`
 
+## 🎙️ Voice Interaction & Gated Security (Phase 7)
+
+Jarvis features a local-first voice subsystem managed by `VoiceManager` and the continuous listening command `jarvis listen`.
+
+### 1. Wake Word & Speech-to-Text Setup
+* **Wake Word**: Continuous local listening via OpenWakeWord (or mock/fallback engine) detects `"Hey Jarvis"`, `"Jarvis"`, or `"Wake up"`.
+* **Privacy**: No audio buffer is sent for processing or external API calls until the wake word triggers.
+* **STT**: Captures speech using Whisper.cpp (or fallback Python execution) and transcribes locally.
+* **Confidence Threshold**: Configured via `JARVIS_STT_CONFIDENCE_THRESHOLD` (default: `0.8`). If the Whisper model returns a confidence below this threshold, Jarvis states: *"I didn't quite catch that. Could you repeat?"* and discards the transcription to prevent incorrect action execution.
+
+### 2. Text-to-Speech & Barge-In
+* **TTS**: Piper TTS generates local speech outputs.
+* **Barge-In**: While TTS is playing, if the user triggers the wake phrase, the TTS process is instantly terminated (`SIGKILL` to the playback subprocess tree), and the system immediately transitions back to listening for new input.
+* **Daily Briefing**: Running `jarvis briefing --read-aloud` synthesizes the Claude daily summary and reads it aloud using the TTS pipeline.
+
+### 3. Voice Gated Security Boundary (CRITICAL)
+Voice input is **never** trusted to grant approvals. All tasks submitted via voice are tagged with `source: 'voice'`.
+* **Forced Unattended Mode**: Any guarded action (e.g. `'file-write'`, `'git-operation'`, `'terminal-run'`) requested under a voice task is blocked from interactive CLI/TTY prompting. Instead, it is forced to enter the **Unattended Approval Queue** (`pending-approval` status).
+* **CLI Approval Required**: The task halts and waits until an operator manually runs `jarvis approve <taskId>` via text CLI.
+
+**Example Gated Voice Flow:**
+1. User says: *"Hey Jarvis"* -> triggers listening.
+2. User says: *"Refactor the code in test.js"* -> STT transcribes.
+3. Task is enqueued with `source: 'voice'`.
+4. Software Engineer agent runs and attempts a `'file-write'` action on `test.js`.
+5. Permission Gatekeeper detects `source: 'voice'`. It halts the task and records a `pending` decision in the `AuditLog`.
+6. Jarvis states: *"Task requires manual CLI approval."*
+7. User runs `jarvis approve <taskId>` via terminal.
+8. Orchestrator resumes task and executes write.
+
 ---
 
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **164 tests across 26 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, and Phase 5 delegation safety.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **185 tests across 32 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, and Phase 5 delegation safety.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:

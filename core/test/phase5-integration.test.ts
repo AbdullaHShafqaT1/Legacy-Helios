@@ -166,8 +166,8 @@ describe('Phase 5 - Delegation Safety, Browser, and Terminal Operator Integratio
       // sends Terminal Operator (acting agent) a message requesting execution of "node -v" (low-risk command).
       const requestMsg = {
         id: crypto.randomUUID(),
-        sender: 'researcher',
-        recipient: 'terminal-operator',
+        sender: 'researcher' as any,
+        recipient: 'terminal-operator' as any,
         type: 'terminal-run',
         payload: { command: 'node -v' },
         timestamp: new Date().toISOString(),
@@ -196,8 +196,8 @@ describe('Phase 5 - Delegation Safety, Browser, and Terminal Operator Integratio
 
       const requestMsg = {
         id: crypto.randomUUID(),
-        sender: 'researcher',
-        recipient: 'terminal-operator',
+        sender: 'researcher' as any,
+        recipient: 'terminal-operator' as any,
         type: 'terminal-run',
         payload: { command: `node ${scriptPath}` }, // not in allow-list
         timestamp: new Date().toISOString(),
@@ -239,8 +239,8 @@ describe('Phase 5 - Delegation Safety, Browser, and Terminal Operator Integratio
 
       const requestMsg = {
         id: crypto.randomUUID(),
-        sender: 'researcher',
-        recipient: 'browser-operator',
+        sender: 'researcher' as any,
+        recipient: 'browser-operator' as any,
         type: 'browser-navigate',
         payload: { url: 'https://example.com' },
         timestamp: new Date().toISOString(),
@@ -268,8 +268,8 @@ describe('Phase 5 - Delegation Safety, Browser, and Terminal Operator Integratio
     it('should BLOCK delegated browser navigate to file:// URL (restricted resource) from Researcher', async () => {
       const requestMsg = {
         id: crypto.randomUUID(),
-        sender: 'researcher',
-        recipient: 'browser-operator',
+        sender: 'researcher' as any,
+        recipient: 'browser-operator' as any,
         type: 'browser-navigate',
         payload: { url: 'file:///etc/passwd' },
         timestamp: new Date().toISOString(),
