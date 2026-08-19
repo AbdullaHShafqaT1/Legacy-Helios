@@ -44,9 +44,9 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **6.3** | Browser Concurrency: Process-level AsyncLocalStorage implemented to inject distinct `taskId` contexts into `BrowserConnector`, ensuring task isolation. | **COMPLETE** |
 | **6.4** | Per-OS CI matrix: `ubuntu-latest`, `windows-latest`, and `macos-latest` workflows added to GitHub actions and verified. | **COMPLETE** |
 | **6.5** | Real-Restart Resumption Simulation: Extracted orchestration loops. Simulated task resumption with cross-process test scripts due to daemon architectural limitations. | **PARTIAL** |
-| **7.1** | Wake Word Detection: Continuous listening local wake-word engine ("Hey Jarvis", "Jarvis", "Wake up"). | **COMPLETE** |
-| **7.2** | Local Speech-to-Text: Local Whisper.cpp integration, with confidence thresholding and clarification logic. | **COMPLETE** |
-| **7.3** | Local Text-to-Speech: Local Piper engine integration, Daily Briefing `--read-aloud` command. | **COMPLETE** |
+| **7.1** | Wake Word Detection: Continuous listening local wake-word engine ("Hey Jarvis", "Jarvis", "Wake up"). Subprocess wrapper stubbed due to host/CI compile constraints. | **PARTIAL** |
+| **7.2** | Local Speech-to-Text: Local Whisper.cpp integration, with confidence thresholding and clarification logic. Subprocess wrapper stubbed due to host/CI compile constraints. | **PARTIAL** |
+| **7.3** | Local Text-to-Speech: Local Piper engine integration, Daily Briefing `--read-aloud` command. Subprocess wrapper stubbed due to host/CI compile constraints. | **PARTIAL** |
 | **7.4** | Conversational Interruption (Barge-in): Wake word or interrupt key cancels TTS output instantly and switches to listening. | **COMPLETE** |
 | **7.5** | Voice-to-Task Bridge & Hardened Gating: Submitted voice tasks run inside core orchestrator under `source: 'voice'`. Active prompts bypass interactive CLI input and are forced to unattended approval queue (`pending-approval`). | **COMPLETE** |
 

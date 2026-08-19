@@ -3,6 +3,13 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { AudioEngine } from '../VoiceManager.js';
 import { Logger } from 'pino';
 
+/**
+ * LocalAudioEngine class implements the AudioEngine interface.
+ * NOTE: Due to environment and dependency constraints (lack of PyAudio, native sound systems,
+ * and pre-installed Whisper/Piper binaries on target developer/CI runners), this class operates
+ * as an architectural skeleton/plumbing layout. The spawned python subprocesses act as simulated
+ * stubs rather than executing real speech processing algorithms. This is an explicit documented limitation.
+ */
 export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   private wakeWordProcess: ChildProcess | null = null;
   private ttsProcess: ChildProcess | null = null;

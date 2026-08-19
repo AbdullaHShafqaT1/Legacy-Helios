@@ -318,6 +318,9 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 
 Jarvis features a local-first voice subsystem managed by `VoiceManager` and the continuous listening command `jarvis listen`.
 
+> [!WARNING]
+> **Environment & Dependency Limitations (Objectives 1–3 - PARTIAL)**: Due to lack of native microphone hardware access on developer sandboxes/headless CI runners, missing pre-built openWakeWord/Whisper/Piper binaries, and PyAudio library installation restrictions, the `LocalAudioEngine` operates as a **skeleton plumbing wrapper**. The spawned subprocesses run simulated stubs verifying signal handling and multi-process lifecycle mechanics rather than native speech-processing models.
+
 ### 1. Wake Word & Speech-to-Text Setup
 * **Wake Word**: Continuous local listening via OpenWakeWord (or mock/fallback engine) detects `"Hey Jarvis"`, `"Jarvis"`, or `"Wake up"`.
 * **Privacy**: No audio buffer is sent for processing or external API calls until the wake word triggers.
