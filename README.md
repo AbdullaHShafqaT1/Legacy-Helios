@@ -1,4 +1,4 @@
-# Legacy's Helios - Jarvis OS Kernel (Phases 1–6 Complete)
+# Legacy's Helios - Jarvis OS Kernel (Phases 1–8 Complete)
 
 > **A modular, autonomous AI Operating System designed for software engineering, automation, scientific research, and deep productivity.**
 
@@ -314,22 +314,29 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 * `approval_status`: `'granted'`
 * `params_json`: `{"path":"/workspace/code.js","bytes":42,"actingOnBehalfOf":"researcher"}`
 
-## 🎙️ Voice Interaction & Gated Security (Phase 7)
+## 🎙️ Voice Interaction & Gated Security (Phase 8)
 
-Jarvis features a local-first voice subsystem managed by `VoiceManager` and the continuous listening command `jarvis listen`.
+Jarvis features a fully local-first, offline voice subsystem managed by `VoiceManager` and the continuous listening command `jarvis listen`.
 
-> [!WARNING]
-> **Environment & Dependency Limitations (Objectives 1–3 - PARTIAL)**: Due to lack of native microphone hardware access on developer sandboxes/headless CI runners, missing pre-built openWakeWord/Whisper/Piper binaries, and PyAudio library installation restrictions, the `LocalAudioEngine` operates as a **skeleton plumbing wrapper**. The spawned subprocesses run simulated stubs verifying signal handling and multi-process lifecycle mechanics rather than native speech-processing models.
+### Local Setup & Prerequisites
+To run the offline local speech stack:
+1. **Python packages**: Install speech engine requirements on the system Python:
+   ```bash
+   pip install -r requirements-speech.txt
+   ```
+2. **Download Models**: Run the model downloader to pre-cache openWakeWord ONNX files and the Whisper tiny weights:
+   ```bash
+   python core/src/voice/engines/download_models.py
+   ```
 
-### 1. Wake Word & Speech-to-Text Setup
-* **Wake Word**: Continuous local listening via OpenWakeWord (or mock/fallback engine) detects `"Hey Jarvis"`, `"Jarvis"`, or `"Wake up"`.
-* **Privacy**: No audio buffer is sent for processing or external API calls until the wake word triggers.
-* **STT**: Captures speech using Whisper.cpp (or fallback Python execution) and transcribes locally.
+### 1. Wake Word & Speech-to-Text Engines
+* **Wake Word**: Continuous local listening via OpenWakeWord loads `hey_jarvis_v0.1.onnx` using `onnxruntime` to scan microphone streams (mono 16kHz PCM).
+* **STT**: Uses `openai-whisper` (tiny model) loaded locally to transcribe commands. Resampling and wav parsing are executed natively in python (using `scipy`), bypassing external `ffmpeg` executable dependencies.
 * **Confidence Threshold**: Configured via `JARVIS_STT_CONFIDENCE_THRESHOLD` (default: `0.8`). If the Whisper model returns a confidence below this threshold, Jarvis states: *"I didn't quite catch that. Could you repeat?"* and discards the transcription to prevent incorrect action execution.
 
 ### 2. Text-to-Speech & Barge-In
-* **TTS**: Piper TTS generates local speech outputs.
-* **Barge-In**: While TTS is playing, if the user triggers the wake phrase, the TTS process is instantly terminated (`SIGKILL` to the playback subprocess tree), and the system immediately transitions back to listening for new input.
+* **TTS**: OS SAPI5 voice engine via `pyttsx3` is used to speak aloud or synthesize to WAV. To support cross-platform headless CI runners without audio drivers, the engine gracefully falls back to generating silent dummy WAV files and logging text instead of crashing.
+* **Barge-In**: While TTS is speaking, if the user triggers the wake phrase, the TTS process is instantly terminated (`SIGKILL` to the playback subprocess tree), which clears SAPI5 audio buffers instantly to stop playback.
 * **Daily Briefing**: Running `jarvis briefing --read-aloud` synthesizes the Claude daily summary and reads it aloud using the TTS pipeline.
 
 ### 3. Voice Gated Security Boundary (CRITICAL)
@@ -351,7 +358,7 @@ Voice input is **never** trusted to grant approvals. All tasks submitted via voi
 
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **185 tests across 32 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, and Phase 5 delegation safety.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **191 tests across 33 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, Phase 5 delegation safety, real voice engine integrations, and the E2E Voice Gated Security boundary.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:
