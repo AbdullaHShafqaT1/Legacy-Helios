@@ -21,6 +21,9 @@ describe('Configuration Loader', () => {
     delete process.env.JARVIS_VECTOR_STORE_TYPE;
     delete process.env.JARVIS_EMBEDDING_DIMENSIONS;
     delete process.env.JARVIS_MEMORY_MAX_ENTRIES;
+    delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
+    delete process.env.JARVIS_STT_CONFIDENCE_THRESHOLD;
+    delete process.env.JARVIS_TTS_RATE;
   });
 
   afterEach(() => {
@@ -57,6 +60,9 @@ describe('Configuration Loader', () => {
     expect(config.vectorStoreType).toBe('sqlite-json-cosine');
     expect(config.embeddingDimensions).toBe(384);
     expect(config.memoryMaxEntries).toBe(1000);
+    expect(config.voiceWakeWordThreshold).toBe(0.1);
+    expect(config.voiceSttConfidenceThreshold).toBe(0.8);
+    expect(config.voiceTtsRate).toBe(175);
   });
 
   it('should parse optional variables correctly when provided', () => {
@@ -127,5 +133,25 @@ describe('Configuration Loader', () => {
     // Should return cached first key
     expect(config2.anthropicApiKey).toBe('first-key');
     expect(config1).toBe(config2);
+  });
+
+  it('should parse speech configuration overrides and throw on invalid values', () => {
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.35';
+    process.env.JARVIS_STT_CONFIDENCE_THRESHOLD = '0.92';
+    process.env.JARVIS_TTS_RATE = '150';
+
+    const config = loadConfig(false);
+    expect(config.voiceWakeWordThreshold).toBe(0.35);
+    expect(config.voiceSttConfidenceThreshold).toBe(0.92);
+    expect(config.voiceTtsRate).toBe(150);
+
+    clearConfigCache();
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = 'not-a-number';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
+
+    clearConfigCache();
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.35';
+    process.env.JARVIS_STT_CONFIDENCE_THRESHOLD = 'invalid';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
   });
 });
