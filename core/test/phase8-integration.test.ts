@@ -10,6 +10,7 @@ import { AuditLog } from '../src/permissions/auditLog.js';
 import { PermissionGatekeeper, denyAllPrompt } from '../src/permissions/gatekeeper.js';
 import { executionContext } from '../src/lib/context.js';
 import { spawn } from 'node:child_process';
+import { loadConfig } from '../src/lib/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,7 +63,8 @@ describe('Phase 8 Integration: Real-Engine Voice-Cannot-Approve Boundary', () =>
     const transcription = transcriptionResult.text;
     
     // Assert that fallback was NOT used (the result came from the real model)
-    if (process.env.JARVIS_CI_FALLBACK !== 'true') {
+    const config = loadConfig(false);
+    if (!config.voiceCiFallback) {
       expect(transcriptionResult.fallback).toBeUndefined();
     }
 

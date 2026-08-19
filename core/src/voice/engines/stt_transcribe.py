@@ -10,7 +10,7 @@ from scipy.io import wavfile
 # Suppress PyGame/PyTorch warnings
 os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
-def load_audio_without_ffmpeg(path):
+def load_audio_without_ffmpeg(path, target_sr=16000):
     sr, y = wavfile.read(path)
     # Convert stereo to mono
     if len(y.shape) > 1:
@@ -26,8 +26,7 @@ def load_audio_without_ffmpeg(path):
     else:
         y = y.astype(np.float32)
 
-    # Resample to 16000Hz using linear interpolation
-    target_sr = 16000
+    # Resample to target_sr using linear interpolation
     if sr != target_sr:
         duration = len(y) / sr
         num_samples = int(duration * target_sr)
@@ -59,6 +58,9 @@ def main():
     parser.add_argument("--wav", type=str, help="Path to input WAV file")
     parser.add_argument("--duration", type=int, default=5, help="Microphone record duration in seconds")
     parser.add_argument("--force-failure", action="store_true", help="Force model load failure for testing")
+    parser.add_argument("--model-path", type=str, default="tiny", help="Path or version of Whisper model")
+    parser.add_argument("--input-device", type=str, default="", help="Audio input device name/index")
+    parser.add_argument("--sample-rate", type=int, default=16000, help="Audio stream sample rate")
     args = parser.parse_args()
 
     force_fail = args.force_failure or (os.environ.get("FORCE_STT_FAILURE") == "true")
@@ -71,7 +73,7 @@ def main():
     if not force_fail:
         try:
             import whisper
-            model = whisper.load_model("tiny")
+            model = whisper.load_model(args.model_path)
             model_loaded = True
         except Exception as e:
             model_error = str(e)
@@ -88,9 +90,17 @@ def main():
         try:
             import sounddevice as sd
             
-            sample_rate = 16000
+            sample_rate = args.sample_rate
             print("Recording started. Please speak...", file=sys.stderr, flush=True)
-            recording = sd.rec(int(args.duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
+            
+            device = None
+            if args.input_device:
+                try:
+                    device = int(args.input_device)
+                except ValueError:
+                    device = args.input_device
+
+            recording = sd.rec(int(args.duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=device)
             sd.wait()
             print("Recording finished.", file=sys.stderr, flush=True)
             
@@ -117,7 +127,7 @@ def main():
     try:
         if model_loaded:
             # Load audio into numpy array bypassing ffmpeg executable dependency
-            audio_array = load_audio_without_ffmpeg(audio_path)
+            audio_array = load_audio_without_ffmpeg(audio_path, target_sr=16000)
             
             # Transcribe audio array
             result = model.transcribe(audio_array)

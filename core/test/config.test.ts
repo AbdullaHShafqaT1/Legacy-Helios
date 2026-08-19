@@ -24,6 +24,12 @@ describe('Configuration Loader', () => {
     delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
     delete process.env.JARVIS_STT_CONFIDENCE_THRESHOLD;
     delete process.env.JARVIS_TTS_RATE;
+    delete process.env.JARVIS_WAKE_WORD_MODEL_PATH;
+    delete process.env.JARVIS_STT_MODEL_PATH;
+    delete process.env.JARVIS_AUDIO_INPUT_DEVICE;
+    delete process.env.JARVIS_AUDIO_OUTPUT_DEVICE;
+    delete process.env.JARVIS_AUDIO_SAMPLE_RATE;
+    delete process.env.JARVIS_CI_FALLBACK;
   });
 
   afterEach(() => {
@@ -63,6 +69,12 @@ describe('Configuration Loader', () => {
     expect(config.voiceWakeWordThreshold).toBe(0.1);
     expect(config.voiceSttConfidenceThreshold).toBe(0.8);
     expect(config.voiceTtsRate).toBe(175);
+    expect(config.voiceWakeWordModelPath).toBe('');
+    expect(config.voiceSttModelPath).toBe('');
+    expect(config.voiceAudioInputDevice).toBe('');
+    expect(config.voiceAudioOutputDevice).toBe('');
+    expect(config.voiceAudioSampleRate).toBe(16000);
+    expect(config.voiceCiFallback).toBe(false);
   });
 
   it('should parse optional variables correctly when provided', () => {
@@ -139,11 +151,23 @@ describe('Configuration Loader', () => {
     process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.35';
     process.env.JARVIS_STT_CONFIDENCE_THRESHOLD = '0.92';
     process.env.JARVIS_TTS_RATE = '150';
+    process.env.JARVIS_WAKE_WORD_MODEL_PATH = '/custom/wake.onnx';
+    process.env.JARVIS_STT_MODEL_PATH = '/custom/whisper.pt';
+    process.env.JARVIS_AUDIO_INPUT_DEVICE = 'Microphone Array';
+    process.env.JARVIS_AUDIO_OUTPUT_DEVICE = 'Realtek Speakers';
+    process.env.JARVIS_AUDIO_SAMPLE_RATE = '44100';
+    process.env.JARVIS_CI_FALLBACK = 'true';
 
     const config = loadConfig(false);
     expect(config.voiceWakeWordThreshold).toBe(0.35);
     expect(config.voiceSttConfidenceThreshold).toBe(0.92);
     expect(config.voiceTtsRate).toBe(150);
+    expect(config.voiceWakeWordModelPath).toBe('/custom/wake.onnx');
+    expect(config.voiceSttModelPath).toBe('/custom/whisper.pt');
+    expect(config.voiceAudioInputDevice).toBe('Microphone Array');
+    expect(config.voiceAudioOutputDevice).toBe('Realtek Speakers');
+    expect(config.voiceAudioSampleRate).toBe(44100);
+    expect(config.voiceCiFallback).toBe(true);
 
     clearConfigCache();
     process.env.JARVIS_WAKE_WORD_THRESHOLD = 'not-a-number';
@@ -152,6 +176,11 @@ describe('Configuration Loader', () => {
     clearConfigCache();
     process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.35';
     process.env.JARVIS_STT_CONFIDENCE_THRESHOLD = 'invalid';
+    expect(() => loadConfig(false)).toThrow(ConfigError);
+
+    clearConfigCache();
+    process.env.JARVIS_STT_CONFIDENCE_THRESHOLD = '0.92';
+    process.env.JARVIS_AUDIO_SAMPLE_RATE = 'not-an-integer';
     expect(() => loadConfig(false)).toThrow(ConfigError);
   });
 });

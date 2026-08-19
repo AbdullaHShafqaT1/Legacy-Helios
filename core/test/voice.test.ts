@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { VoiceManager } from '../src/voice/VoiceManager.js';
 import { MockAudioEngine } from '../src/voice/engines/MockAudioEngine.js';
 import { LocalAudioEngine } from '../src/voice/engines/LocalAudioEngine.js';
+import { loadConfig } from '../src/lib/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -221,7 +222,8 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     expect(result.confidence).toBeGreaterThan(0.2);
     
     // Assert real Whisper engine was used, NOT the fallback shadow!
-    if (process.env.JARVIS_CI_FALLBACK !== 'true') {
+    const config = loadConfig(false);
+    if (!config.voiceCiFallback) {
       expect(engine.lastSttFallbackUsed).toBe(false);
     }
   });

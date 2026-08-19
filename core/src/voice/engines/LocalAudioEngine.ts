@@ -33,12 +33,12 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   async init(): Promise<void> {
     const config = loadConfig(false);
 
-    // Objective 6: Check for missing/corrupted model files at startup
+    // Objective 6: Check for missing/corrupted model files at startup (configurable)
     const homeDir = os.homedir();
-    const whisperModelPath = path.join(homeDir, '.cache', 'whisper', 'tiny.pt');
+    const whisperModelPath = config.voiceSttModelPath || path.join(homeDir, '.cache', 'whisper', 'tiny.pt');
     
     // Only fail if we are not explicitly forcing a test failure
-    if (!fs.existsSync(whisperModelPath) && process.env.FORCE_STT_FAILURE !== 'true' && process.env.JARVIS_CI_FALLBACK !== 'true') {
+    if (!fs.existsSync(whisperModelPath) && process.env.FORCE_STT_FAILURE !== 'true' && !config.voiceCiFallback) {
       throw new Error(`Whisper tiny model file not found at ${whisperModelPath}. Please run: python core/src/voice/engines/download_models.py`);
     }
 
@@ -84,6 +84,15 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
                       config.voiceWakeWordThreshold.toString();
     args.push('--threshold', threshold);
 
+    // Objective 6: pass configurable parameters to wake word script
+    if (config.voiceWakeWordModelPath) {
+      args.push('--model-path', config.voiceWakeWordModelPath);
+    }
+    if (config.voiceAudioInputDevice) {
+      args.push('--input-device', config.voiceAudioInputDevice);
+    }
+    args.push('--sample-rate', config.voiceAudioSampleRate.toString());
+
     this.logger.info({ args }, 'Spawning wake word detector process');
     this.wakeWordProcess = spawn('python', args);
 
@@ -108,12 +117,22 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   private startTranscription(): void {
     this.logger.info('STT Engine recording/transcribing...');
     
+    const config = loadConfig(false);
     const sttScript = path.join(__dirname, 'stt_transcribe.py');
     const args = [sttScript];
 
     if (process.env.JARVIS_STT_WAV) {
       args.push('--wav', process.env.JARVIS_STT_WAV);
     }
+
+    // Objective 6: pass configurable parameters to STT script
+    if (config.voiceSttModelPath) {
+      args.push('--model-path', config.voiceSttModelPath);
+    }
+    if (config.voiceAudioInputDevice) {
+      args.push('--input-device', config.voiceAudioInputDevice);
+    }
+    args.push('--sample-rate', config.voiceAudioSampleRate.toString());
 
     this.sttProcess = spawn('python', args);
 
@@ -190,6 +209,15 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
 
       const rate = process.env.JARVIS_TTS_RATE || config.voiceTtsRate.toString();
       args.push('--rate', rate);
+
+      // Objective 6: pass audio output device name or voice mapping
+      if (config.voiceAudioOutputDevice) {
+        args.push('--output-device', config.voiceAudioOutputDevice);
+      }
+
+      if (config.voiceCiFallback) {
+        args.push('--ci-fallback');
+      }
 
       this.ttsProcess = spawn('python', args);
 
