@@ -55,7 +55,7 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **8.4** | Voice-Cannot-Approve Gating Proof: Implemented E2E integration test proving transcribed user approval WAV file (`yes_approved.wav`) cannot authorize gated write actions, routing them to the unattended queue. | **COMPLETE** |
 
 ### Total Project Test Count:
-**191 tests** pass successfully across **33 test files** inside the repository.
+**197 tests** pass successfully across **33 test files** inside the repository.
 
 ---
 
@@ -175,7 +175,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Readability** | **PASS** | Documented code comments, clean control flow, and explicit logging. |
 | **Naming** | **PASS** | Adheres strictly to project standards (camelCase variables, snake_case DB columns, lowercase python files). |
 | **Documentation** | **PASS** | Updated Sub-task Completion Index, carry-forward status ledger, self-review scorecard, and limitations. |
-| **Testing** | **PASS** | Total test suite reaches **191 tests across 33 files**, verifying the real speech engines offline on WAV file fixtures. |
+| **Testing** | **PASS** | Total test suite reaches **197 tests across 33 files**, verifying the real speech engines offline on WAV file fixtures. |
 | **Edge Cases** | **PASS** | Handled COM deadlock issues in SAPI5 on Windows by instantiating fresh engines, and bypassed ffmpeg dependency using numpy-based WAV decoding. |
 | **Best Practices** | **PASS** | Safe resource cleanup (deleting COM references, killing child processes, cleaning temp files). |
 | **Future Compatibility** | **PASS** | Standard AudioEngine interfaces remain fully compatible with potential cloud/alternate local engines (Piper, whisper.cpp). |

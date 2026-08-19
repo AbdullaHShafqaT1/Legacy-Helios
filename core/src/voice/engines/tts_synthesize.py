@@ -8,10 +8,16 @@ def main():
     parser.add_argument("text", type=str, help="Text to speak aloud or synthesize")
     parser.add_argument("--wav", type=str, help="Optional output path to save WAV file")
     parser.add_argument("--rate", type=int, default=175, help="Speech synthesis rate (words per minute)")
+    parser.add_argument("--force-failure", action="store_true", help="Force synthesis failure for testing")
     args = parser.parse_args()
 
     text = args.text
     out_path = args.wav
+
+    force_fail = args.force_failure or (os.environ.get("FORCE_TTS_FAILURE") == "true")
+    if force_fail:
+        print("TTS forced failure activated.", file=sys.stderr, flush=True)
+        sys.exit(1)
 
     print(f"TTS STARTING: {text}", flush=True)
 
@@ -38,7 +44,7 @@ def main():
             print("TTS FINISHED", flush=True)
             sys.exit(0)
         except Exception as init_err:
-            print(f"TTS native engine initialization failed: {init_err}. Executing dry-run/dummy-file fallback.", file=sys.stderr, flush=True)
+            print(f"TTS native engine initialization failed: {init_err}. Executing fallback.", file=sys.stderr, flush=True)
             if out_path:
                 import wave
                 out_dir = os.path.dirname(out_path)

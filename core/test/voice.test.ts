@@ -11,6 +11,27 @@ import { LocalAudioEngine } from '../src/voice/engines/LocalAudioEngine.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Helper function to extract WAV file duration from headers
+function getWavDuration(filePath: string): number {
+  const buffer = fs.readFileSync(filePath);
+  let pos = 12;
+  let dataSize = 0;
+  let byteRate = 0;
+  while (pos < buffer.length - 8) {
+    const chunkId = buffer.toString('utf8', pos, pos + 4);
+    const chunkSize = buffer.readUInt32LE(pos + 4);
+    if (chunkId === 'fmt ') {
+      byteRate = buffer.readUInt32LE(pos + 8 + 8);
+    } else if (chunkId === 'data') {
+      dataSize = chunkSize;
+      break;
+    }
+    pos += 8 + chunkSize;
+  }
+  if (byteRate === 0 || dataSize === 0) return 0;
+  return dataSize / byteRate;
+}
+
 describe('VoiceManager', () => {
   let engine: MockAudioEngine;
   let logger: pino.Logger;
@@ -101,6 +122,8 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     delete process.env.JARVIS_STT_WAV;
     delete process.env.JARVIS_TTS_OUTPUT_WAV;
     delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
+    delete process.env.FORCE_STT_FAILURE;
+    delete process.env.FORCE_TTS_FAILURE;
   });
 
   afterEach(() => {
@@ -113,10 +136,22 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     delete process.env.JARVIS_STT_WAV;
     delete process.env.JARVIS_TTS_OUTPUT_WAV;
     delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
+    delete process.env.FORCE_STT_FAILURE;
+    delete process.env.FORCE_TTS_FAILURE;
+    vi.restoreAllMocks();
   });
 
   it('initializes successfully checking dependencies', async () => {
     await expect(engine.init()).resolves.not.toThrow();
+  });
+
+  it('Objective 6: fails fast if model files are missing/corrupted at startup', async () => {
+    // Spy on os.homedir to point to a non-existent directory
+    vi.spyOn(os, 'homedir').mockReturnValue('/nonexistent-whisper-cache-directory');
+    
+    // Force_STT_FAILURE is not set, so it should run the file check
+    const badEngine = new LocalAudioEngine(logger);
+    await expect(badEngine.init()).rejects.toThrow(/Whisper tiny model file not found/);
   });
 
   it('detects wake word from real audio fixture', async () => {
@@ -137,6 +172,28 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     engine.startListening();
     await wakeWordPromise;
     engine.stopListening();
+  });
+
+  it('Edge Case: handles wake-word false-positives on background noise (garbage.wav)', async () => {
+    const fixturePath = path.resolve(__dirname, 'fixtures', 'garbage.wav');
+    expect(fs.existsSync(fixturePath)).toBe(true);
+
+    process.env.JARVIS_WAKE_WAV = fixturePath;
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.1';
+
+    await engine.init();
+
+    let wakeWordTriggered = false;
+    engine.once('wake-word', () => {
+      wakeWordTriggered = true;
+    });
+
+    engine.startListening();
+    // Wait 3 seconds to confirm wake word process completes without trigger
+    await new Promise(r => setTimeout(r, 3000));
+    engine.stopListening();
+
+    expect(wakeWordTriggered).toBe(false);
   });
 
   it('transcribes speech from real audio fixture', async () => {
@@ -162,17 +219,51 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
 
     expect(result.text.toLowerCase()).toContain('refactor');
     expect(result.confidence).toBeGreaterThan(0.2);
+    
+    // Assert real Whisper engine was used, NOT the fallback shadow!
+    if (process.env.JARVIS_CI_FALLBACK !== 'true') {
+      expect(engine.lastSttFallbackUsed).toBe(false);
+    }
   });
 
-  it('synthesizes speech to file and verifies audio properties', async () => {
+  it('Edge Case: triggers STT confidence threshold and clarification on garbage/noisy inputs', async () => {
+    const wakeFixture = path.resolve(__dirname, 'fixtures', 'jarvis_wake.wav');
+    const sttFixture = path.resolve(__dirname, 'fixtures', 'garbage.wav');
+    expect(fs.existsSync(sttFixture)).toBe(true);
+
+    process.env.JARVIS_WAKE_WAV = wakeFixture;
+    process.env.JARVIS_STT_WAV = sttFixture;
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.1';
+
+    const manager = new VoiceManager(engine, logger, {
+      sttConfidenceThreshold: 0.8,
+      wakeWordSensitivity: 0.5,
+    });
+
+    await manager.init();
+
+    let speakCalledWith = '';
+    vi.spyOn(engine, 'speak').mockImplementation(async (text) => {
+      speakCalledWith = text;
+    });
+
+    engine.emit('wake-word');
+    // Emits transcription with confidence 0.1 to simulate poor-quality audio transcription trigger
+    engine.emit('transcription', 'bzzzt', 0.1);
+
+    expect(speakCalledWith).toContain("didn't quite catch that");
+  });
+
+  it('synthesizes speech to file and verifies audio properties and text length duration plausibility', async () => {
     process.env.JARVIS_TTS_OUTPUT_WAV = tempOutWav;
     await engine.init();
 
-    await engine.speak('This is a test of the text to speech engine output validation.');
+    const inputText = 'This is a test of the text to speech engine output validation.';
+    await engine.speak(inputText);
     
     expect(fs.existsSync(tempOutWav)).toBe(true);
     const stats = fs.statSync(tempOutWav);
-    expect(stats.size).toBeGreaterThan(44); // WAV header is 44 bytes, audio content must exist
+    expect(stats.size).toBeGreaterThan(44); // WAV header is 44 bytes
 
     // Verify WAV format header (RIFF, WAVE)
     const buffer = fs.readFileSync(tempOutWav);
@@ -180,6 +271,16 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     const wave = buffer.toString('utf8', 8, 12);
     expect(riff).toBe('RIFF');
     expect(wave).toBe('WAVE');
+
+    // Objective 3 duration check
+    const duration = getWavDuration(tempOutWav);
+    expect(duration).toBeGreaterThan(0.5);
+
+    if (!engine.lastTtsFallbackUsed) {
+      // On real engines, ensure the synthesized duration matches the speech length
+      // SAPI5 speaking rate rate=175 should take around 2.5 - 4.5 seconds for this text
+      expect(duration).toBeGreaterThan(2.0);
+    }
   });
 
   it('supports barge-in interruption cleanly mid-synthesis', async () => {
@@ -194,5 +295,47 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
 
     // The promise resolves when successfully killed
     await expect(speakPromise).resolves.not.toThrow();
+  });
+
+  it('Error Handling: reports fallback when forced STT Whisper fails', async () => {
+    const wakeFixture = path.resolve(__dirname, 'fixtures', 'jarvis_wake.wav');
+    const sttFixture = path.resolve(__dirname, 'fixtures', 'refactor_task.wav');
+
+    process.env.JARVIS_WAKE_WAV = wakeFixture;
+    process.env.JARVIS_STT_WAV = sttFixture;
+    process.env.JARVIS_WAKE_WORD_THRESHOLD = '0.1';
+    process.env.FORCE_STT_FAILURE = 'true';
+
+    await engine.init();
+
+    const transcriptionPromise = new Promise<void>((resolve) => {
+      engine.once('transcription', () => {
+        resolve();
+      });
+    });
+
+    engine.startListening();
+    await transcriptionPromise;
+    engine.stopListening();
+
+    // Verify the engine flagged and logged the fallback transcription!
+    expect(engine.lastSttFallbackUsed).toBe(true);
+  });
+
+  it('Error Handling & Spec Fallback: throws error on complete TTS failure and falls back to console log', async () => {
+    process.env.FORCE_TTS_FAILURE = 'true';
+    await engine.init();
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    
+    const manager = new VoiceManager(engine, logger, {
+      sttConfidenceThreshold: 0.8,
+      wakeWordSensitivity: 0.5,
+    });
+
+    // Speak should throw internally in engine, VoiceManager catches it, logs to console
+    await manager.speak('Hello world fallback synthesis test');
+    
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[Jarvis Speaks]: Hello world fallback synthesis test'));
   });
 }, 30000);

@@ -40,7 +40,7 @@ describe('Phase 8 Integration: Real-Engine Voice-Cannot-Approve Boundary', () =>
     // 1. Transcribe the real audio fixture using the real STT engine
     const sttScript = path.resolve(__dirname, '..', 'src', 'voice', 'engines', 'stt_transcribe.py');
     
-    const transcription = await new Promise<string>((resolve, reject) => {
+    const transcriptionResult = await new Promise<{ text: string; fallback?: boolean }>((resolve, reject) => {
       const proc = spawn('python', [sttScript, '--wav', fixturePath]);
       let stdout = '';
       proc.stdout.on('data', (d) => stdout += d.toString());
@@ -49,7 +49,7 @@ describe('Phase 8 Integration: Real-Engine Voice-Cannot-Approve Boundary', () =>
           try {
             const lines = stdout.trim().split('\n');
             const result = JSON.parse(lines[lines.length - 1]);
-            resolve(result.text);
+            resolve(result);
           } catch (e) {
             reject(new Error(`Failed to parse Whisper output: ${stdout}`));
           }
@@ -58,6 +58,13 @@ describe('Phase 8 Integration: Real-Engine Voice-Cannot-Approve Boundary', () =>
         }
       });
     });
+
+    const transcription = transcriptionResult.text;
+    
+    // Assert that fallback was NOT used (the result came from the real model)
+    if (process.env.JARVIS_CI_FALLBACK !== 'true') {
+      expect(transcriptionResult.fallback).toBeUndefined();
+    }
 
     // Verify the real engine genuinely transcribed the voice approval phrase
     logger.info({ transcription }, 'Real audio file transcribed.');

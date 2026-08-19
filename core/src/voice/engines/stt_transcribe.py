@@ -41,35 +41,44 @@ def load_audio_without_ffmpeg(path):
 
 def get_fixture_fallback_text(audio_path):
     if not audio_path:
-        return "fallback transcription", 0.99
+        return "fallback transcription", 0.5
     
     filename = os.path.basename(audio_path).lower()
     if "wake" in filename:
-        return "Hey Jarvis", 0.99
+        return "Hey Jarvis", 0.5
     elif "refactor" in filename:
-        return "submit a task to refactor the database", 0.99
+        return "submit a task to refactor the database", 0.5
     elif "approved" in filename:
-        return "yes, approved", 0.99
+        return "yes, approved", 0.5
     elif "garbage" in filename:
-        return "", 1.0
-    return "fallback transcription", 0.99
+        return "", 0.5
+    return "fallback transcription", 0.5
 
 def main():
     parser = argparse.ArgumentParser(description="Whisper local STT transcriber")
     parser.add_argument("--wav", type=str, help="Path to input WAV file")
     parser.add_argument("--duration", type=int, default=5, help="Microphone record duration in seconds")
+    parser.add_argument("--force-failure", action="store_true", help="Force model load failure for testing")
     args = parser.parse_args()
+
+    force_fail = args.force_failure or (os.environ.get("FORCE_STT_FAILURE") == "true")
 
     # Try loading whisper model
     model = None
     model_loaded = False
-    try:
-        import whisper
-        # Load tiny model
-        model = whisper.load_model("tiny")
-        model_loaded = True
-    except Exception as e:
-        print(f"STT Whisper model load failed: {e}. Falling back to fixture/file pattern matching.", file=sys.stderr, flush=True)
+    model_error = "None"
+    
+    if not force_fail:
+        try:
+            import whisper
+            model = whisper.load_model("tiny")
+            model_loaded = True
+        except Exception as e:
+            model_error = str(e)
+            print(f"STT Whisper model load failed: {e}. Falling back to fixture/file pattern matching.", file=sys.stderr, flush=True)
+    else:
+        model_error = "Forced STT failure flag set."
+        print("STT Whisper forced failure activated. Running fallback path.", file=sys.stderr, flush=True)
 
     audio_path = args.wav
     temp_created = False
@@ -95,7 +104,12 @@ def main():
         except Exception as e:
             if not model_loaded:
                 # If no microphone hardware and model failed, print fallback
-                print(json.dumps({"text": "fallback transcription from mic failure", "confidence": 0.99}), flush=True)
+                print(json.dumps({
+                    "text": "fallback transcription from mic failure", 
+                    "confidence": 0.5,
+                    "fallback": True,
+                    "error": f"Mic record failed and model not loaded: {e}"
+                }), flush=True)
                 sys.exit(0)
             print(json.dumps({"error": f"Failed to record from microphone: {e}"}))
             sys.exit(1)
@@ -118,9 +132,21 @@ def main():
                 confidence = 1.0
             
             text = result.get("text", "").strip()
+            
+            # Print clean result JSON to stdout
+            output = {
+                "text": text,
+                "confidence": round(confidence, 4)
+            }
         else:
             # Fallback pattern match
             text, confidence = get_fixture_fallback_text(audio_path)
+            output = {
+                "text": text,
+                "confidence": round(confidence, 4),
+                "fallback": True,
+                "error": f"Whisper engine unavailable: {model_error}"
+            }
 
         # Cleanup temp file if created
         if temp_created and audio_path and os.path.exists(audio_path):
@@ -129,11 +155,6 @@ def main():
             except:
                 pass
 
-        # Print result JSON to stdout
-        output = {
-            "text": text,
-            "confidence": round(confidence, 4)
-        }
         print(json.dumps(output), flush=True)
         sys.exit(0)
     except Exception as e:
@@ -142,7 +163,9 @@ def main():
             text, confidence = get_fixture_fallback_text(audio_path)
             output = {
                 "text": text,
-                "confidence": round(confidence, 4)
+                "confidence": round(confidence, 4),
+                "fallback": True,
+                "error": f"Transcription pipeline exception: {e}"
             }
             print(json.dumps(output), flush=True)
             sys.exit(0)

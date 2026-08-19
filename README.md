@@ -358,7 +358,7 @@ Voice input is **never** trusted to grant approvals. All tasks submitted via voi
 
 ## 🧪 Testing & CI Verification
 
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **191 tests across 33 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, Phase 5 delegation safety, real voice engine integrations, and the E2E Voice Gated Security boundary.
+Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **197 tests across 33 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, Phase 5 delegation safety, real voice engine integrations, and the E2E Voice Gated Security boundary.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:

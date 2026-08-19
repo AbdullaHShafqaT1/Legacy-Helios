@@ -3,6 +3,8 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { AudioEngine } from '../VoiceManager.js';
 import { Logger } from 'pino';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../lib/config.js';
 
@@ -20,12 +22,26 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   private logger: Logger;
   private isListening = false;
 
+  public lastSttFallbackUsed = false;
+  public lastTtsFallbackUsed = false;
+
   constructor(logger: Logger) {
     super();
     this.logger = logger;
   }
 
   async init(): Promise<void> {
+    const config = loadConfig(false);
+
+    // Objective 6: Check for missing/corrupted model files at startup
+    const homeDir = os.homedir();
+    const whisperModelPath = path.join(homeDir, '.cache', 'whisper', 'tiny.pt');
+    
+    // Only fail if we are not explicitly forcing a test failure
+    if (!fs.existsSync(whisperModelPath) && process.env.FORCE_STT_FAILURE !== 'true' && process.env.JARVIS_CI_FALLBACK !== 'true') {
+      throw new Error(`Whisper tiny model file not found at ${whisperModelPath}. Please run: python core/src/voice/engines/download_models.py`);
+    }
+
     // Fail fast if python or required speech libraries are missing
     try {
       const pyCheck = spawn('python', ['--version']);
@@ -115,6 +131,14 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
           // Get the last line in case of warnings printed to stdout
           const lastLine = lines[lines.length - 1];
           const result = JSON.parse(lastLine);
+          
+          if (result.fallback === true) {
+            this.lastSttFallbackUsed = true;
+            this.logger.warn({ err: result.error }, 'STT engine fallback transcription activated.');
+          } else {
+            this.lastSttFallbackUsed = false;
+          }
+
           if (result.text !== undefined && result.confidence !== undefined) {
             this.emit('transcription', result.text, result.confidence);
           } else if (result.error) {
@@ -169,9 +193,26 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
 
       this.ttsProcess = spawn('python', args);
 
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
+
+      this.ttsProcess.stdout?.on('data', (data) => {
+        stdoutBuffer += data.toString();
+      });
+      this.ttsProcess.stderr?.on('data', (data) => {
+        stderrBuffer += data.toString();
+      });
+
       this.ttsProcess.on('close', (code) => {
         this.ttsProcess = null;
         if (code === 0 || code === null) {
+          const output = stdoutBuffer + stderrBuffer;
+          if (output.includes('FALLBACK')) {
+            this.lastTtsFallbackUsed = true;
+            this.logger.warn('TTS engine running in fallback mode.');
+          } else {
+            this.lastTtsFallbackUsed = false;
+          }
           resolve();
         } else {
           reject(new Error(`TTS failed with code ${code}`));
