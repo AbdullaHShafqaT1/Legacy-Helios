@@ -109,6 +109,22 @@ A future developer picking up work after Phase 8 should review these technical d
     On Windows, Node.js `spawn` requires `.cmd` suffixes for binaries like `npm`, `npx`, `git`. `TerminalConnector` automatically appends `.cmd` when `process.platform === 'win32'` and the resolved command matches a known cross-platform binary.
 18. **Bypassing ffmpeg dependency in local Whisper (Phase 8 Note)**:
     Because local developers/headless CI runners may lack the external `ffmpeg` executable binary in their PATH, the Speech-to-Text script loading relies on a custom numpy-based WAV parser (using `scipy.io.wavfile` and linear interpolation resampling) that bypasses ffmpeg.
+19. **Local Speech Stack Installation & Model Setup (Phase 8 Note)**:
+    - **Dependency Installation**: Install Python packages using `pip install -r requirements-speech.txt`.
+    - **Caching Model Weights**: Download ONNX openWakeWord models and Whisper tiny models to the local machine cache directory by running `python core/src/voice/engines/download_models.py`.
+20. **Speech & Audio Device Config (Phase 8 Note)**:
+    - Custom configurations are managed via env vars loaded and validated in `core/src/lib/config.ts`:
+      - `JARVIS_WAKE_WORD_MODEL_PATH`: Specifies the ONNX file path for the wake-word engine (default: loads bundled 'jarvis').
+      - `JARVIS_STT_MODEL_PATH`: Specifies the path or version of Whisper models (default: tiny).
+      - `JARVIS_AUDIO_INPUT_DEVICE` / `JARVIS_AUDIO_OUTPUT_DEVICE`: Mapped to select custom audio input/output capture devices by name or index.
+      - `JARVIS_AUDIO_SAMPLE_RATE`: Sets the hardware audio sample rate (default: 16000).
+      - `JARVIS_CI_FALLBACK`: Set to `true` on headless CI runner environments where SAPI5 and physical microphone hardware are unavailable to enable fallback tolerances.
+21. **How to Run Voice Fixture Tests (Phase 8 Note)**:
+    - Programmatically generate tests' wav audio assets using `python core/test/fixtures/generate_fixtures.py`.
+    - Execute the full voice suite using `npx vitest run core/test/voice.test.ts` or `npx vitest run core/test/phase8-integration.test.ts`.
+22. **Voice-Cannot-Approve Security Model (Phase 8 Note)**:
+    - A critical security boundary forces any task derived from voice input (`source: 'voice'`) to skip standard interactive CLI prompting and reject auto-approvals. Any gated write action maps to the unattended approval queue (`pending-approval` state), requiring manual text command intervention (`jarvis approve <taskId>`).
+    - *Example (Objective 5)*: If a user speaks `"yes, approved"` in `yes_approved.wav`, the Whisper engine transcribes this string. Even though the transcription contains the user's explicit consent, the Permission Gatekeeper identifies the task's origin is voice and locks down the write attempt inside the unattended queue, preventing voice command privilege escalations.
 
 ---
 
