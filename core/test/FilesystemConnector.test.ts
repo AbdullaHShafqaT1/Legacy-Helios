@@ -159,7 +159,7 @@ describe('FilesystemConnector Class', () => {
     expect(mockPrompt).not.toHaveBeenCalled();
 
     const recent = auditLog.recent();
-    expect(recent).toHaveLength(2);
+    expect(recent).toHaveLength(3); // request + decision + outcome
     expect(recent[1].approval_status).toBe('denied');
     expect(recent[1].approver).toBe('system');
     expect(recent[0].outcome).toBe('denied — not-permitted');

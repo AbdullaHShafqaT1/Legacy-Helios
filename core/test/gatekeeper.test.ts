@@ -171,7 +171,7 @@ describe('PermissionGatekeeper Class', () => {
 
       // Audit log must record decision denial with system approver
       const recent = auditLog.recent();
-      expect(recent).toHaveLength(1);
+      expect(recent).toHaveLength(2); // request + decision
       expect(recent[0].approval_status).toBe('denied');
       expect(recent[0].approver).toBe('system');
     });

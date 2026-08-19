@@ -92,7 +92,11 @@ export class PermissionGatekeeper {
     const isRoleAllowed = Boolean(policy && policy.allowedActions.includes(action as GuardedAction));
 
     if (!isRoleAllowed) {
-      const correlationId = crypto.randomUUID();
+      const correlationId = this.auditLog.recordRequest({
+        actor: request.actor,
+        action: action,
+        params: request.params,
+      });
 
       this.auditLog.recordDecision({
         correlationId,
