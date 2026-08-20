@@ -12,7 +12,8 @@ export type GuardedAction =
   | 'browser-read'
   | 'browser-write'
   | 'browser-admin'
-  | 'terminal-run';
+  | 'terminal-run'
+  | 'vision-read';
 
 export type AgentRole =
   | 'software-engineer'
@@ -34,7 +35,7 @@ export type PolicyMap = Record<string, AgentPolicy>;
  * Default role-based policies for Jarvis agents.
  *
  * DESIGN DECISION: Conservative Auto-Approval
- * Only passive, read-only operations ('file-read', 'memory-read') are eligible for policy-level auto-approval.
+ * Only passive, read-only operations ('file-read', 'memory-read', 'vision-read') are eligible for policy-level auto-approval.
  * All mutating actions ('file-write', 'file-delete', 'git-operation', 'memory-write') and all high-friction/destructive
  * categories ('git-force-push', 'git-history-rewrite', 'destructive') MUST NEVER be auto-approved
  * by policy and must strictly require human-in-the-loop authorization.
@@ -51,12 +52,13 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
       'destructive',
       'memory-write',
       'memory-read',
+      'vision-read',
     ],
-    autoApproveActions: ['file-read', 'memory-read'],
+    autoApproveActions: ['file-read', 'memory-read', 'vision-read'],
   },
   'researcher': {
-    allowedActions: ['file-read', 'memory-read', 'memory-write'],
-    autoApproveActions: ['file-read', 'memory-read'],
+    allowedActions: ['file-read', 'memory-read', 'memory-write', 'vision-read'],
+    autoApproveActions: ['file-read', 'memory-read', 'vision-read'],
   },
   'code-reviewer': {
     allowedActions: ['file-read', 'memory-read', 'memory-write'],
@@ -67,11 +69,11 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
     autoApproveActions: ['memory-read', 'kanban-write'],
   },
   'browser-operator': {
-    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write'],
-    autoApproveActions: ['browser-read', 'memory-read'],
+    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write', 'vision-read'],
+    autoApproveActions: ['browser-read', 'memory-read', 'vision-read'],
   },
   'terminal-operator': {
-    allowedActions: ['terminal-run', 'memory-read', 'memory-write'],
-    autoApproveActions: ['memory-read'],
+    allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read'],
+    autoApproveActions: ['memory-read', 'vision-read'],
   },
 };

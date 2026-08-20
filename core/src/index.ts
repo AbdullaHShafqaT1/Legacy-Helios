@@ -5,11 +5,13 @@ import { Orchestrator, defaultStopSignalPath } from './orchestrator.js';
 
 let orchestrator: Orchestrator | null = null;
 let dbInstance: any = null;
+let shutdownHandle: (() => Promise<void>) | null = null;
 
 try {
   // Bootstrap the Jarvis OS daemon context
   const ctx = bootstrap(createStdinApprovalPrompt(), 'jarvis-core');
   dbInstance = ctx.db;
+  shutdownHandle = ctx.shutdown;
 
   const stopSignalPath = defaultStopSignalPath(ctx.config.dbPath);
 
@@ -37,15 +39,21 @@ try {
 }
 
 // Clean shutdown signal listeners
-function handleShutdown(signal: string): void {
+async function handleShutdown(signal: string): Promise<void> {
   if (orchestrator) {
     orchestrator.stop();
   }
-  if (dbInstance && dbInstance.open) {
+  if (shutdownHandle) {
+    try {
+      await shutdownHandle();
+    } catch (e) {
+      console.error('Error during graceful shutdown:', e);
+    }
+  } else if (dbInstance && dbInstance.open) {
     dbInstance.close();
   }
   process.exit(0);
 }
 
-process.on('SIGINT', () => handleShutdown('SIGINT'));
-process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => { handleShutdown('SIGINT'); });
+process.on('SIGTERM', () => { handleShutdown('SIGTERM'); });

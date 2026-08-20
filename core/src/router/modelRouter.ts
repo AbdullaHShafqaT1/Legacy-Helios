@@ -1,8 +1,12 @@
-export type TaskType = "coding" | "reasoning" | "research";
+export type TaskType = "coding" | "reasoning" | "research" | "vision";
 
 export interface ModelRequestContext {
   description: string;
   fileContext?: unknown;
+  image?: {
+    base64: string;
+    mediaType: string;
+  };
 }
 
 export interface ModelResponse {

@@ -25,6 +25,8 @@ import { BrowserConnector } from '../../connectors/browser/BrowserConnector.js';
 import { TerminalConnector } from '../../connectors/terminal/TerminalConnector.js';
 import { BrowserOperatorAgent } from '../../agents/browser-operator/BrowserOperatorAgent.js';
 import { TerminalOperatorAgent } from '../../agents/terminal-operator/TerminalOperatorAgent.js';
+import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionConnector.js';
+import { HealthMonitor } from './lib/health.js';
 
 export interface CliContext {
   config: Config;
@@ -42,8 +44,11 @@ export interface JarvisContext extends CliContext {
   memoryManager: MemoryManager;
   messageRouter: MessageRouter;
   kanbanConnector: KanbanConnector;
-  browserConnector?: BrowserConnector;
-  terminalConnector?: TerminalConnector;
+  browserConnector: BrowserConnector;
+  terminalConnector: TerminalConnector;
+  computerVisionConnector: ComputerVisionConnector;
+  healthMonitor: HealthMonitor;
+  shutdown: () => Promise<void>;
 }
 
 /**
@@ -75,12 +80,23 @@ export function openCliContext(loggerName = 'jarvis-cli'): CliContext {
  * @param approvalPrompt Interactive gating prompt used for human authorization.
  * @param loggerName Core system logging category (default: "jarvis").
  */
-export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis'): JarvisContext {
+export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis', requireApiKey = true): JarvisContext {
   // Fail fast immediately at startup if ANTHROPIC_API_KEY is missing
-  const config = loadConfig(true);
+  const config = loadConfig(requireApiKey);
 
   const logger = createLogger(loggerName, config.logLevel);
+  const healthMonitor = new HealthMonitor(createLogger('health-monitor', config.logLevel));
+  
+  healthMonitor.transition('core', 'START');
+
   const db = openDb(config.dbPath);
+  try {
+    db.prepare('SELECT 1').get();
+    healthMonitor.transition('persistence', 'HEALTHY');
+  } catch (err: any) {
+    healthMonitor.transition('persistence', 'UNHEALTHY', err.message);
+  }
+
   const eventBus = new JarvisEventBus();
   const queue = new TaskQueue(db, createLogger('task-queue', config.logLevel), eventBus);
   const auditLog = new AuditLog(db);
@@ -93,7 +109,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
 
   const modelRouter = new ModelRouter();
   const claudeConnector = new ClaudeConnector({
-    apiKey: config.anthropicApiKey!,
+    apiKey: config.anthropicApiKey || 'dummy-key-for-tests',
     model: config.model,
     maxRetries: config.maxRetries,
     timeoutMs: config.claudeTimeoutMs,
@@ -155,6 +171,19 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     timeoutMs: config.terminalTimeoutMs,
   });
 
+  const computerVisionConnector = new ComputerVisionConnector({
+    gatekeeper,
+    auditLog,
+    modelRouter,
+    logger: createLogger('vision-connector', config.logLevel),
+  });
+
+  healthMonitor.transition('browser', 'HEALTHY');
+  healthMonitor.transition('terminal', 'HEALTHY');
+  healthMonitor.transition('vision', 'HEALTHY');
+  healthMonitor.transition('voice', 'HEALTHY');
+  healthMonitor.transition('core', 'HEALTHY');
+
   const softwareEngineer = new SoftwareEngineerAgent(
     modelRouter,
     gatekeeper,
@@ -170,7 +199,10 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     filesystemConnector,
     memoryManager,
     createLogger('agent:researcher', config.logLevel),
-    messageRouter
+    messageRouter,
+    gatekeeper,
+    auditLog,
+    computerVisionConnector
   );
   agentRouter.register(researcher);
 
@@ -247,6 +279,54 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     });
   });
 
+  let shutdownInProgress = false;
+  const shutdown = async (): Promise<void> => {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    
+    logger.warn('Graceful shutdown starting...');
+    healthMonitor.transition('core', 'STOPPING');
+
+    // Emit event bus emergency stop first (stops queue polling)
+    try {
+      eventBus.emit('queue:emergency-stop');
+    } catch (err: any) {
+      logger.error({ err }, 'Error emitting queue:emergency-stop');
+    }
+
+    // Terminate browser sessions
+    healthMonitor.transition('browser', 'STOPPING');
+    try {
+      await browserConnector.close();
+      healthMonitor.transition('browser', 'STOPPED');
+    } catch (err: any) {
+      healthMonitor.transition('browser', 'FAILED', err.message);
+    }
+
+    // Terminate active terminal shells
+    healthMonitor.transition('terminal', 'STOPPING');
+    try {
+      await terminalConnector.killAll();
+      healthMonitor.transition('terminal', 'STOPPED');
+    } catch (err: any) {
+      healthMonitor.transition('terminal', 'FAILED', err.message);
+    }
+
+    // Close SQLite primary database
+    healthMonitor.transition('persistence', 'STOPPING');
+    try {
+      if (db && db.open) {
+        db.close();
+      }
+      healthMonitor.transition('persistence', 'STOPPED');
+    } catch (err: any) {
+      healthMonitor.transition('persistence', 'FAILED', err.message);
+    }
+
+    healthMonitor.transition('core', 'STOPPED');
+    logger.warn('Graceful shutdown completed.');
+  };
+
   return {
     config,
     logger,
@@ -262,5 +342,8 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis')
     kanbanConnector,
     browserConnector,
     terminalConnector,
+    computerVisionConnector,
+    healthMonitor,
+    shutdown,
   };
 }

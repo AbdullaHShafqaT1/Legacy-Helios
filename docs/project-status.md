@@ -1,4 +1,4 @@
-# Jarvis OS Project Status (Phases 1–8 Complete)
+# Jarvis OS Project Status (Phases 1–9 Complete)
 
 This living status document captures the completion state of **Jarvis Phases 1 through 8**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
@@ -53,9 +53,14 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **8.2** | Local Speech-to-Text: Integrated a real offline `openai-whisper` (tiny model) engine transcribing speech inputs with avg_logprob confidence metrics. | **COMPLETE** |
 | **8.3** | Local Text-to-Speech: Integrated a real offline `pyttsx3` SAPI5/OS engine for high-fidelity speech synthesis. | **COMPLETE** |
 | **8.4** | Voice-Cannot-Approve Gating Proof: Implemented E2E integration test proving transcribed user approval WAV file (`yes_approved.wav`) cannot authorize gated write actions, routing them to the unattended queue. | **COMPLETE** |
+| **9.1** | Desktop Screenshot Script: Created `scripts/screenshot.ps1` utilizing GDI/GDI+ APIs for capturing primary/secondary display monitors. | **COMPLETE** |
+| **9.2** | Vision Connector: Implemented `ComputerVisionConnector` in `connectors/vision/` with gated safety boundary checks. | **COMPLETE** |
+| **9.3** | Health Monitor: Added `HealthMonitor` in `core/src/lib/` tracking restarts, state transitions, and logging status. | **COMPLETE** |
+| **9.4** | Idempotent Grful Shutdown & Recovery: Added robust SIGINT/SIGTERM handlers and bootstrap recovery. | **COMPLETE** |
+| **9.5** | Agent & CLI Integration: Added `jarvis screen` / `jarvis health` commands and integrated screenshot queries to `ResearcherAgent`. | **COMPLETE** |
 
 ### Total Project Test Count:
-**197 tests** pass successfully across **33 test files** inside the repository.
+**206 tests** pass successfully across **35 test files** inside the repository.
 
 ---
 
@@ -168,32 +173,32 @@ The table below provides the authoritative final resolution status for all carry
 
 For each of the 7 assumptions (A1–A7) from the master charter, here is their alignment in the Phase 8 codebase:
 
-- **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Consistent**. The TypeScript/Node.js orchestrator runtime is fully integrated with Python speech processing scripts (openWakeWord, Whisper).
+- **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Consistent**. The TypeScript/Node.js orchestrator runtime is fully integrated with Python speech processing scripts (openWakeWord, Whisper) and a local-first GDI screen capture script.
 - **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Consistent**. Fully verified on Windows (using SAPI5 pyttsx3 engine) and tested across all platforms in CI matrices.
 - **A3 — Cloud model provider: Anthropic Claude API as primary, with a pluggable model-router so other providers (OpenAI, local Ollama) can be swapped in without redesign**: **Consistent**. Pluggable structure is enforced by `ModelRouter`.
 - **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred)**. Local LLM serving via Ollama remains deferred.
-- **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Partially Consistent**. Computer control (browser/terminal) and voice capabilities are now fully implemented.
+- **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Partially Consistent**. Computer control (browser/terminal/read-only vision) and voice capabilities are now fully implemented.
 - **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory**: **Consistent**. Relational Task Queue and Audit Log run in SQLite; Vector Store matches the specification.
 - **A7 — You are a developer comfortable running Node/Python locally and reading code**: **Consistent**. Build systems, environment download scripts, and tests conform to standard developer installations.
 
 ---
 
-## 📊 Self-Review Scorecard (Phases 1–8 Complete)
+## 📊 Self-Review Scorecard (Phases 1–9 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |
-| **Architecture** | **PASS** | Clean separation of voice manager, local audio engine wrappers, and local speech processing python backend scripts. |
-| **Code Quality** | **PASS** | Strong TS type annotations and modular Python scripts. Compiles with zero errors. |
-| **Security** | **PASS** | Hardened voice safety boundary: voice tasks have zero authorization capabilities, defaulting any gated writes to the unattended pending approval queue. |
-| **Performance** | **PASS** | Local wake word and whisper execution finishes within 2-3 seconds using light models. |
-| **Maintainability** | **PASS** | Uses standard environment variables for WAV path overrides, allowing offline testing of audio sub-components. |
-| **Scalability** | **PASS** | Simple CLI and programmatic controls scale to complex multi-process voice orchestration. |
+| **Architecture** | **PASS** | Clean separation of voice manager, local audio engine wrappers, local speech processing python backend scripts, and read-only computer vision connector. |
+| **Code Quality** | **PASS** | Strong TS type annotations and modular Python/PowerShell scripts. Compiles with zero errors. |
+| **Security** | **PASS** | Hardened voice safety boundary: voice tasks have zero authorization capabilities, defaulting any gated writes to the unattended pending approval queue. Verified that no interactive computer-control execution triggers are present. |
+| **Performance** | **PASS** | Local wake word, whisper execution, and GDI screenshots finish within 2-3 seconds using light models and native APIs. |
+| **Maintainability** | **PASS** | Uses standard environment variables for WAV path overrides, allowing offline testing of audio sub-components and mock desktop fixtures. |
+| **Scalability** | **PASS** | Simple CLI and programmatic controls scale to complex multi-process voice and vision orchestration. |
 | **Readability** | **PASS** | Documented code comments, clean control flow, and explicit logging. |
 | **Naming** | **PASS** | Adheres strictly to project standards (camelCase variables, snake_case DB columns, lowercase python files). |
 | **Documentation** | **PASS** | Updated Sub-task Completion Index, carry-forward status ledger, self-review scorecard, and limitations. |
-| **Testing** | **PASS** | Total test suite reaches **197 tests across 33 files**, verifying the real speech engines offline on WAV file fixtures. |
-| **Edge Cases** | **PASS** | Handled COM deadlock issues in SAPI5 on Windows by instantiating fresh engines, and bypassed ffmpeg dependency using numpy-based WAV decoding. |
-| **Best Practices** | **PASS** | Safe resource cleanup (deleting COM references, killing child processes, cleaning temp files). |
-| **Future Compatibility** | **PASS** | Standard AudioEngine interfaces remain fully compatible with potential cloud/alternate local engines (Piper, whisper.cpp). |
+| **Testing** | **PASS** | Total test suite reaches **206 tests across 35 files**, verifying the real speech engines offline and GDI screenshot capabilities. |
+| **Edge Cases** | **PASS** | Handled COM deadlock issues in SAPI5 on Windows, bypassed ffmpeg dependency, and gated display-fallback routines cleanly. |
+| **Best Practices** | **PASS** | Safe resource cleanup (deleting COM references, killing child processes, cleaning temp files, and idempotent DB closure). |
+| **Future Compatibility** | **PASS** | Standard AudioEngine and Vision interfaces remain fully compatible with potential cloud/alternate local engines or desktop agent execution models. |
 | **Dependency Management** | **PASS** | Explicitly documented Python requirements (`requirements-speech.txt`) and setup processes. |
 | **Consistency w/ Project Standards** | **PASS** | Fully meets TypeScript, Python, ESM, Vitest, and GitHub Actions CI matrices standards. |

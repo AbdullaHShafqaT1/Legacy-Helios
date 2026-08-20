@@ -44,6 +44,12 @@ Commands:
   listen
     Starts the local voice assistant in continuously listening mode.
 
+  screen
+    Captures the desktop screen and analyzes its content visually.
+
+  health
+    Displays a diagnostic status table of all monitored subsystems.
+
   help
     Prints this help message.
 `);
@@ -82,7 +88,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -330,6 +336,35 @@ async function run(): Promise<void> {
       
       // Keep process alive
       process.stdin.resume();
+    } else if (command === 'screen') {
+      const { bootstrap } = await import('../core/src/bootstrap.js');
+      const { denyAllPrompt } = await import('../core/src/permissions/gatekeeper.js');
+      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli');
+      
+      console.log('Capturing screen and analyzing...');
+      try {
+        const description = await fullCtx.computerVisionConnector.analyzeScreen('researcher', 'Describe what is currently visible on the screen.');
+        console.log('\n--- SCREEN DESCRIPTION ---\n');
+        console.log(description);
+        console.log('\n--------------------------\n');
+      } catch (err: any) {
+        console.error('Screen capture/analysis failed:', err.message);
+      }
+    } else if (command === 'health') {
+      const { bootstrap } = await import('../core/src/bootstrap.js');
+      const { denyAllPrompt } = await import('../core/src/permissions/gatekeeper.js');
+      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli');
+
+      console.log('\n--- JARVIS OS SUBSYSTEM OPERATIONAL HEALTH ---\n');
+      const report = fullCtx.healthMonitor.getReport();
+      console.log('Subsystem\tState\t\tRestarts\tLast Error');
+      console.log('---------\t-----\t\t--------\t----------');
+      for (const item of report) {
+        const stateStr = item.state.padEnd(10);
+        const errorStr = item.lastError ? item.lastError.substring(0, 40) : 'None';
+        console.log(`${item.name.padEnd(9)}\t${stateStr}\t${item.restartCount}\t\t${errorStr}`);
+      }
+      console.log('\n----------------------------------------------\n');
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);

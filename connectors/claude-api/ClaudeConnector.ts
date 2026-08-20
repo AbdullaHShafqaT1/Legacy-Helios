@@ -12,7 +12,7 @@ export class ClaudeConnectorError extends Error {
 }
 
 export class ClaudeConnector implements ModelRoute {
-  taskTypes: TaskType[] = ['coding', 'reasoning'];
+  taskTypes: TaskType[] = ['coding', 'reasoning', 'vision'];
   private apiKey: string;
   private model: string;
   private maxRetries: number;
@@ -61,10 +61,25 @@ export class ClaudeConnector implements ModelRoute {
     while (true) {
       try {
         attempt++;
+        const messagesContent = context.image ? [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: context.image.mediaType,
+              data: context.image.base64
+            }
+          },
+          {
+            type: 'text',
+            text: prompt
+          }
+        ] : prompt;
+
         const response = await this.client.messages.create({
           model: this.model,
           max_tokens: 4096,
-          messages: [{ role: 'user', content: prompt }]
+          messages: [{ role: 'user', content: messagesContent as any }]
         }, {
           timeout: this.timeoutMs
         });

@@ -7,6 +7,7 @@ import { MemoryManager } from '../../core/src/memory/memoryManager.js';
 import { MessageRouter } from '../../core/src/router/messageRouter.js';
 import { PermissionGatekeeper } from '../../core/src/permissions/gatekeeper.js';
 import { AuditLog } from '../../core/src/permissions/auditLog.js';
+import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionConnector.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -27,6 +28,7 @@ export class ResearcherAgent implements Agent {
   private readonly messageRouter?: MessageRouter;
   private readonly gatekeeper?: PermissionGatekeeper;
   private readonly auditLog?: AuditLog;
+  private readonly computerVisionConnector?: ComputerVisionConnector;
 
   constructor(
     modelRouter: ModelRouter,
@@ -35,7 +37,8 @@ export class ResearcherAgent implements Agent {
     logger: Logger,
     messageRouter?: MessageRouter,
     gatekeeper?: PermissionGatekeeper,
-    auditLog?: AuditLog
+    auditLog?: AuditLog,
+    computerVisionConnector?: ComputerVisionConnector
   ) {
     this.modelRouter = modelRouter;
     this.filesystemConnector = filesystemConnector;
@@ -44,6 +47,7 @@ export class ResearcherAgent implements Agent {
     this.messageRouter = messageRouter;
     this.gatekeeper = gatekeeper;
     this.auditLog = auditLog;
+    this.computerVisionConnector = computerVisionConnector;
   }
 
   /**
@@ -143,6 +147,31 @@ export class ResearcherAgent implements Agent {
 
     if (recalledContext) {
       enrichedDescription += recalledContext;
+    }
+
+    const descLower = input.description.toLowerCase();
+    const isScreenTask = descLower.includes('screen') || descLower.includes('visible') || descLower.includes('screenshot') || descLower.includes('monitor') || descLower.includes('what is on my display');
+
+    if (isScreenTask && this.computerVisionConnector) {
+      try {
+        const observation = await this.computerVisionConnector.captureScreen(this.name);
+        if (observation.success && observation.screenshotPath) {
+          const base64Data = fs.readFileSync(observation.screenshotPath).toString('base64');
+          const visionResponse = await this.modelRouter.route('vision', {
+            description: `Describe what you see in the provided screenshot based on this user request: ${input.description}`,
+            image: {
+              base64: base64Data,
+              mediaType: 'image/png'
+            }
+          });
+          enrichedDescription += `\n\n[SCREEN VISUAL OBSERVATION]:\n${visionResponse.text}`;
+          if (observation.imageFixtureFallbackUsed) {
+            readErrors.push('Headless environment: Using real pre-rendered desktop_screenshot.png fixture.');
+          }
+        }
+      } catch (err: any) {
+        readErrors.push(`Failed to capture/analyze screen: ${err.message}`);
+      }
     }
 
     // 2. Route task to model router ('research'). Exceptions bypass catch and propagate out.
