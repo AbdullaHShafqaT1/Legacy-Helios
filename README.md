@@ -311,8 +311,8 @@ When an agent performs an action on behalf of another agent (e.g. Researcher req
 **Example Audit Record for Delegated Write:**
 * `actor`: `'software-engineer'`
 * `action`: `'file-write'`
-* `approval_status`: `'granted'`
-* `params_json`: `{"path":"/workspace/code.js","bytes":42,"actingOnBehalfOf":"researcher"}`
+  - `approval_status`: `'granted'`
+  - `params_json`: `{"path":"/workspace/code.js","bytes":42,"actingOnBehalfOf":"researcher"}`
 
 ## 🎙️ Voice Interaction & Gated Security (Phase 8)
 
@@ -329,20 +329,32 @@ To run the offline local speech stack:
    python core/src/voice/engines/download_models.py
    ```
 
-### 1. Wake Word & Speech-to-Text Engines
+### 1. Advanced Speech Configuration Settings
+The local speech engines behavior can be customized via the following variables in the `.env` configuration file:
+* **`JARVIS_WAKE_WORD_MODEL_PATH`**: Specifies a custom ONNX wake word model path (default: empty string, loads bundled `'jarvis'` model).
+* **`JARVIS_STT_MODEL_PATH`**: Configurable local directory path or model version/name of the Whisper model to load (default: `'tiny'`).
+* **`JARVIS_AUDIO_INPUT_DEVICE`**: Custom microphone audio capture device name or index (default: empty string, maps to default OS microphone).
+* **`JARVIS_AUDIO_OUTPUT_DEVICE`**: Custom speaker output device name or index (default: empty string, maps to default OS speaker).
+* **`JARVIS_AUDIO_SAMPLE_RATE`**: Specifies the sample rate for audio processes (default: `16000`).
+* **`JARVIS_CI_FALLBACK`**: Toggles tolerance logic on lightweight headless CI matrices lacking physical microphones or speakers (default: `false`). If `true`, the STT/wake word models will run on file-based fixtures where cached, and the TTS engine generates silent dummy files instead of crashing.
+
+### 2. Wake Word & Speech-to-Text Engines
 * **Wake Word**: Continuous local listening via OpenWakeWord loads `hey_jarvis_v0.1.onnx` using `onnxruntime` to scan microphone streams (mono 16kHz PCM).
 * **STT**: Uses `openai-whisper` (tiny model) loaded locally to transcribe commands. Resampling and wav parsing are executed natively in python (using `scipy`), bypassing external `ffmpeg` executable dependencies.
 * **Confidence Threshold**: Configured via `JARVIS_STT_CONFIDENCE_THRESHOLD` (default: `0.8`). If the Whisper model returns a confidence below this threshold, Jarvis states: *"I didn't quite catch that. Could you repeat?"* and discards the transcription to prevent incorrect action execution.
 
-### 2. Text-to-Speech & Barge-In
-* **TTS**: OS SAPI5 voice engine via `pyttsx3` is used to speak aloud or synthesize to WAV. To support cross-platform headless CI runners without audio drivers, the engine gracefully falls back to generating silent dummy WAV files and logging text instead of crashing.
+### 3. Text-to-Speech & Barge-In
+* **TTS**: OS SAPI5 voice engine via `pyttsx3` is used to speak aloud or synthesize to WAV. To support cross-platform headless CI runners without audio drivers, the engine gracefully falls back to generating silent dummy WAV files and logging text instead of crashing if `JARVIS_CI_FALLBACK=true` is enabled.
 * **Barge-In**: While TTS is speaking, if the user triggers the wake phrase, the TTS process is instantly terminated (`SIGKILL` to the playback subprocess tree), which clears SAPI5 audio buffers instantly to stop playback.
 * **Daily Briefing**: Running `jarvis briefing --read-aloud` synthesizes the Claude daily summary and reads it aloud using the TTS pipeline.
 
-### 3. Voice Gated Security Boundary (CRITICAL)
+### 4. Voice Gated Security Boundary (CRITICAL)
 Voice input is **never** trusted to grant approvals. All tasks submitted via voice are tagged with `source: 'voice'`.
 * **Forced Unattended Mode**: Any guarded action (e.g. `'file-write'`, `'git-operation'`, `'terminal-run'`) requested under a voice task is blocked from interactive CLI/TTY prompting. Instead, it is forced to enter the **Unattended Approval Queue** (`pending-approval` status).
 * **CLI Approval Required**: The task halts and waits until an operator manually runs `jarvis approve <taskId>` via text CLI.
+
+**The "Yes, Approved" Voice Bypass Verification (Objective 5):**
+Even if a voice input command explicitly contains approval phrases (e.g., a synthesized audio file like `yes_approved.wav` containing `"yes, approved"` is fed into the transcriber), the permission gatekeeper identifies the task's origin is `source: 'voice'`. It immediately halts execution and forces the gated action to the `pending-approval` unattended queue, completely preventing voice-based approval privilege escalations.
 
 **Example Gated Voice Flow:**
 1. User says: *"Hey Jarvis"* -> triggers listening.
@@ -354,11 +366,21 @@ Voice input is **never** trusted to grant approvals. All tasks submitted via voi
 7. User runs `jarvis approve <taskId>` via terminal.
 8. Orchestrator resumes task and executes write.
 
+### 5. Running Speech Fixture Tests Locally
+Automated E2E speech tests run offline against pre-compiled audio WAV assets.
+1. Generate test WAV fixtures:
+   ```bash
+   python core/test/fixtures/generate_fixtures.py
+   ```
+2. Execute the local speech stack unit and integration tests:
+   ```bash
+   npx vitest run core/test/voice.test.ts
+   npx vitest run core/test/phase8-integration.test.ts
+   ```
+
 ---
 
 ## 🧪 Testing & CI Verification
-
-Jarvis employs **Vitest** for unit, integration, and E2E pipeline verification. The repository maintains **197 tests across 33 test files**, covering queue scheduling, role-based Gating, memory persistence across restarts, cross-agent shared project recalls, browser connector gating, terminal connector kill/timeout/redaction, Phase 5 delegation safety, real voice engine integrations, and the E2E Voice Gated Security boundary.
 
 ### Running CI Checks Locally Before Pushing
 Before pushing commits or submitting pull requests, developers must run the exact verification pipeline executed by GitHub Actions:
