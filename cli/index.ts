@@ -47,6 +47,12 @@ Commands:
   screen
     Captures the desktop screen and analyzes its content visually.
 
+  mouse <action> [args]
+    Executes controlled desktop mouse actions. Actions: move, click, doubleclick, rightclick, scroll.
+
+  keyboard <action> "<val>"
+    Executes controlled desktop keyboard actions. Actions: type, press, hotkey.
+
   health
     Displays a diagnostic status table of all monitored subsystems.
 
@@ -88,7 +94,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health', 'mouse', 'keyboard'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -365,6 +371,72 @@ async function run(): Promise<void> {
         console.log(`${item.name.padEnd(9)}\t${stateStr}\t${item.restartCount}\t\t${errorStr}`);
       }
       console.log('\n----------------------------------------------\n');
+    } else if (command === 'mouse') {
+      const { bootstrap } = await import('../core/src/bootstrap.js');
+      const { createStdinApprovalPrompt } = await import('../core/src/lib/prompt.js');
+      const fullCtx = bootstrap(createStdinApprovalPrompt(), 'jarvis-cli', false);
+
+      const subAction = positional[0];
+      try {
+        let result;
+        if (subAction === 'move' || subAction === 'click' || subAction === 'doubleclick' || subAction === 'rightclick') {
+          const x = parseInt(positional[1], 10);
+          const y = parseInt(positional[2], 10);
+          if (isNaN(x) || isNaN(y)) {
+            throw new Error('Coordinates x and y must be numbers.');
+          }
+          await fullCtx.computerVisionConnector.captureScreen('software-engineer');
+
+          if (subAction === 'move') {
+            result = await fullCtx.desktopConnector.moveMouse('software-engineer', x, y);
+          } else if (subAction === 'click') {
+            result = await fullCtx.desktopConnector.click('software-engineer', x, y);
+          } else if (subAction === 'doubleclick') {
+            result = await fullCtx.desktopConnector.doubleClick('software-engineer', x, y);
+          } else {
+            result = await fullCtx.desktopConnector.rightClick('software-engineer', x, y);
+          }
+        } else if (subAction === 'scroll') {
+          const amount = parseInt(positional[1], 10);
+          if (isNaN(amount)) {
+            throw new Error('Scroll amount must be a number.');
+          }
+          result = await fullCtx.desktopConnector.scroll('software-engineer', amount);
+        } else {
+          throw new Error(`Unknown mouse action "${subAction}". Expected move, click, doubleclick, rightclick, or scroll.`);
+        }
+
+        console.log(`Action completed: Status [${result.status}] — ${result.message}`);
+      } catch (err: any) {
+        console.error('Mouse action failed:', err.message);
+      }
+    } else if (command === 'keyboard') {
+      const { bootstrap } = await import('../core/src/bootstrap.js');
+      const { createStdinApprovalPrompt } = await import('../core/src/lib/prompt.js');
+      const fullCtx = bootstrap(createStdinApprovalPrompt(), 'jarvis-cli', false);
+
+      const subAction = positional[0];
+      const val = positional[1];
+
+      try {
+        if (!val) {
+          throw new Error('Action value is required.');
+        }
+        let result;
+        if (subAction === 'type') {
+          result = await fullCtx.desktopConnector.typeText('software-engineer', val);
+        } else if (subAction === 'press') {
+          result = await fullCtx.desktopConnector.pressKey('software-engineer', val);
+        } else if (subAction === 'hotkey') {
+          result = await fullCtx.desktopConnector.hotkey('software-engineer', val);
+        } else {
+          throw new Error(`Unknown keyboard action "${subAction}". Expected type, press, or hotkey.`);
+        }
+
+        console.log(`Action completed: Status [${result.status}] — ${result.message}`);
+      } catch (err: any) {
+        console.error('Keyboard action failed:', err.message);
+      }
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);

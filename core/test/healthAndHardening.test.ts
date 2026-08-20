@@ -15,7 +15,7 @@ describe('Health Monitoring and Continuous-Operation Hardening tests', () => {
 
   it('should initialize all subsystems in START state', () => {
     const report = health.getReport();
-    expect(report.length).toBe(6);
+    expect(report.length).toBe(7);
     for (const item of report) {
       expect(item.state).toBe('START');
       expect(item.restartCount).toBe(0);

@@ -13,7 +13,10 @@ export type GuardedAction =
   | 'browser-write'
   | 'browser-admin'
   | 'terminal-run'
-  | 'vision-read';
+  | 'vision-read'
+  | 'desktop-mouse'
+  | 'desktop-keyboard'
+  | 'desktop-admin';
 
 export type AgentRole =
   | 'software-engineer'
@@ -53,6 +56,9 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
       'memory-write',
       'memory-read',
       'vision-read',
+      'desktop-mouse',
+      'desktop-keyboard',
+      'desktop-admin',
     ],
     autoApproveActions: ['file-read', 'memory-read', 'vision-read'],
   },
@@ -69,11 +75,11 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
     autoApproveActions: ['memory-read', 'kanban-write'],
   },
   'browser-operator': {
-    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write', 'vision-read'],
+    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write', 'vision-read', 'desktop-mouse'],
     autoApproveActions: ['browser-read', 'memory-read', 'vision-read'],
   },
   'terminal-operator': {
-    allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read'],
+    allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read', 'desktop-mouse', 'desktop-keyboard'],
     autoApproveActions: ['memory-read', 'vision-read'],
   },
 };

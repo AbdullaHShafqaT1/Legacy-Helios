@@ -36,6 +36,7 @@ export class ComputerVisionConnector {
   private auditLog: AuditLog;
   private modelRouter: ModelRouter;
   private logger: any;
+  public lastObservation: DesktopObservation | null = null;
 
   constructor(options: ComputerVisionConnectorOptions) {
     this.gatekeeper = options.gatekeeper;
@@ -119,6 +120,8 @@ export class ComputerVisionConnector {
         imageFixtureFallbackUsed: false,
       };
 
+      this.lastObservation = observation;
+
       this.auditLog.recordOutcome(
         authorization.correlationId,
         actor,
@@ -144,6 +147,8 @@ export class ComputerVisionConnector {
           screenshotPath: fixturePath,
           imageFixtureFallbackUsed: true,
         };
+
+        this.lastObservation = observation;
 
         this.auditLog.recordOutcome(
           authorization.correlationId,

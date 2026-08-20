@@ -26,6 +26,7 @@ import { TerminalConnector } from '../../connectors/terminal/TerminalConnector.j
 import { BrowserOperatorAgent } from '../../agents/browser-operator/BrowserOperatorAgent.js';
 import { TerminalOperatorAgent } from '../../agents/terminal-operator/TerminalOperatorAgent.js';
 import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionConnector.js';
+import { DesktopConnector } from '../../connectors/desktop/DesktopConnector.js';
 import { HealthMonitor } from './lib/health.js';
 
 export interface CliContext {
@@ -47,6 +48,7 @@ export interface JarvisContext extends CliContext {
   browserConnector: BrowserConnector;
   terminalConnector: TerminalConnector;
   computerVisionConnector: ComputerVisionConnector;
+  desktopConnector: DesktopConnector;
   healthMonitor: HealthMonitor;
   shutdown: () => Promise<void>;
 }
@@ -178,9 +180,17 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('vision-connector', config.logLevel),
   });
 
+  const desktopConnector = new DesktopConnector({
+    gatekeeper,
+    auditLog,
+    visionConnector: computerVisionConnector,
+    logger: createLogger('desktop-connector', config.logLevel),
+  });
+
   healthMonitor.transition('browser', 'HEALTHY');
   healthMonitor.transition('terminal', 'HEALTHY');
   healthMonitor.transition('vision', 'HEALTHY');
+  healthMonitor.transition('desktop', 'HEALTHY');
   healthMonitor.transition('voice', 'HEALTHY');
   healthMonitor.transition('core', 'HEALTHY');
 
@@ -271,6 +281,11 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
 
   // Emergency stop hook: make sure browser and terminal processes are killed cleanly
   eventBus.on('queue:emergency-stop', () => {
+    try {
+      desktopConnector.emergencyStop();
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to stop desktop connector during emergency stop.');
+    }
     browserConnector.close().catch(err => {
       logger.error({ err }, 'Failed to close browser connector during emergency stop.');
     });
@@ -301,6 +316,15 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       healthMonitor.transition('browser', 'STOPPED');
     } catch (err: any) {
       healthMonitor.transition('browser', 'FAILED', err.message);
+    }
+
+    // Terminate desktop sessions
+    healthMonitor.transition('desktop', 'STOPPING');
+    try {
+      desktopConnector.resetActionCount();
+      healthMonitor.transition('desktop', 'STOPPED');
+    } catch (err: any) {
+      healthMonitor.transition('desktop', 'FAILED', err.message);
     }
 
     // Terminate active terminal shells
@@ -343,6 +367,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     browserConnector,
     terminalConnector,
     computerVisionConnector,
+    desktopConnector,
     healthMonitor,
     shutdown,
   };
