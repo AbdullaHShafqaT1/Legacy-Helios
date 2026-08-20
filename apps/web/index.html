@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J.A.R.V.I.S — Legacy Helios</title>
+  <meta name="description" content="Jarvis AI Assistant — Legacy Helios Operating System" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Scanline overlay -->
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <!-- HUD corner brackets -->
+  <div class="hud-corner hud-tl" aria-hidden="true"></div>
+  <div class="hud-corner hud-tr" aria-hidden="true"></div>
+  <div class="hud-corner hud-bl" aria-hidden="true"></div>
+  <div class="hud-corner hud-br" aria-hidden="true"></div>
+
+  <div class="layout">
+
+    <!-- ── HEADER ── -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo-text">J<span class="logo-dot">·</span>A<span class="logo-dot">·</span>R<span class="logo-dot">·</span>V<span class="logo-dot">·</span>I<span class="logo-dot">·</span>S</span>
+        <span class="version-tag">LEGACY HELIOS OS v10.6</span>
+      </div>
+      <div class="header-center">
+        <div class="model-badge" id="model-badge">
+          <span class="badge-dot"></span>
+          <span id="model-name">llava:latest</span>
+          <span class="badge-sep">|</span>
+          <span>localhost:11434</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="connection-status" id="conn-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span class="status-label" id="status-label">CONNECTING</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── MAIN ── -->
+    <main class="main">
+
+      <!-- Orb section -->
+      <section class="orb-section" aria-label="Voice visualizer">
+        <div class="orb-wrap" id="orb-wrap">
+          <!-- Outer glow rings -->
+          <div class="ring ring-4"></div>
+          <div class="ring ring-3"></div>
+          <div class="ring ring-2"></div>
+          <div class="ring ring-1"></div>
+
+          <!-- Waveform bars -->
+          <div class="waveform" id="waveform" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+
+          <!-- Core orb -->
+          <div class="orb-core" id="orb-core">
+            <div class="orb-inner"></div>
+          </div>
+        </div>
+
+        <div class="state-readout" id="state-readout">INITIALIZING</div>
+        <div class="state-sublabel" id="state-sublabel">Connecting to Jarvis...</div>
+      </section>
+
+      <!-- Conversation panel -->
+      <section class="conversation-section">
+        <div class="panel-header">
+          <span class="panel-title">COMM LOG</span>
+          <span class="panel-line"></span>
+          <button class="clear-btn" id="clear-btn" title="Clear conversation">CLR</button>
+        </div>
+        <div class="conversation" id="conversation" role="log" aria-live="polite" aria-label="Conversation log">
+          <div class="msg msg-system">
+            <span class="msg-label">SYS</span>
+            <span class="msg-text">Jarvis online. Awaiting input.</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ── INPUT BAR ── -->
+    <footer class="input-bar">
+      <div class="input-wrap">
+        <span class="input-prefix">›</span>
+        <input
+          type="text"
+          id="text-input"
+          class="text-input"
+          placeholder="Enter command..."
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Type a message to Jarvis"
+        />
+      </div>
+      <button class="btn btn-mic" id="mic-btn" title="Voice input (hold to speak)" aria-label="Start voice input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+      </button>
+      <button class="btn btn-send" id="send-btn" aria-label="Send message">
+        SEND
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
