@@ -339,7 +339,7 @@ async function run(): Promise<void> {
     } else if (command === 'screen') {
       const { bootstrap } = await import('../core/src/bootstrap.js');
       const { denyAllPrompt } = await import('../core/src/permissions/gatekeeper.js');
-      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli');
+      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli', false);
       
       console.log('Capturing screen and analyzing...');
       try {
@@ -353,7 +353,7 @@ async function run(): Promise<void> {
     } else if (command === 'health') {
       const { bootstrap } = await import('../core/src/bootstrap.js');
       const { denyAllPrompt } = await import('../core/src/permissions/gatekeeper.js');
-      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli');
+      const fullCtx = bootstrap(denyAllPrompt, 'jarvis-cli', false);
 
       console.log('\n--- JARVIS OS SUBSYSTEM OPERATIONAL HEALTH ---\n');
       const report = fullCtx.healthMonitor.getReport();
