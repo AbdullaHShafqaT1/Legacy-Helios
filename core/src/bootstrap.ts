@@ -7,7 +7,7 @@ import { TaskQueue } from './queue/index.js';
 import { AuditLog } from './permissions/auditLog.js';
 import { PermissionGatekeeper, ApprovalPrompt } from './permissions/gatekeeper.js';
 import { ModelRouter } from './router/modelRouter.js';
-import { ClaudeConnector } from '../../connectors/claude-api/ClaudeConnector.js';
+import { OllamaConnector } from '../../connectors/ollama/OllamaConnector.js';
 import { AgentRouter } from './router/agentRouter.js';
 import { SoftwareEngineerAgent } from '../../agents/software-engineer/SoftwareEngineerAgent.js';
 import { JarvisEventBus } from './events/bus.js';
@@ -82,7 +82,7 @@ export function openCliContext(loggerName = 'jarvis-cli'): CliContext {
  * @param approvalPrompt Interactive gating prompt used for human authorization.
  * @param loggerName Core system logging category (default: "jarvis").
  */
-export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis', requireApiKey = true): JarvisContext {
+export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis', requireApiKey = false): JarvisContext {
   // Fail fast immediately at startup if ANTHROPIC_API_KEY is missing
   const config = loadConfig(requireApiKey);
 
@@ -110,14 +110,14 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   );
 
   const modelRouter = new ModelRouter();
-  const claudeConnector = new ClaudeConnector({
-    apiKey: config.anthropicApiKey || 'dummy-key-for-tests',
-    model: config.model,
+  const ollamaConnector = new OllamaConnector({
+    model: process.env.JARVIS_OLLAMA_MODEL ?? 'llava:latest',
+    baseUrl: process.env.JARVIS_OLLAMA_BASE_URL ?? 'http://localhost:11434',
     maxRetries: config.maxRetries,
     timeoutMs: config.claudeTimeoutMs,
-    logger: createLogger('claude-connector', config.logLevel),
+    logger: createLogger('ollama-connector', config.logLevel),
   });
-  modelRouter.register(claudeConnector);
+  modelRouter.register(ollamaConnector);
 
   const vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));
   const embeddingProvider = new LocalEmbeddingProvider(config.embeddingDimensions);

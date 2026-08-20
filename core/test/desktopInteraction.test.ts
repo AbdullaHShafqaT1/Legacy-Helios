@@ -126,12 +126,12 @@ describe('Desktop Interaction E2E Integration and Safety tests', () => {
 
     it('should redact sensitive text inputs from audit logs', async () => {
       const recordSpy = vi.spyOn(ctx.auditLog, 'recordRequest');
-      
+
       // Mock the high friction approval prompt to auto-approve
       vi.spyOn(ctx.gatekeeper, 'highFrictionPrompt').mockResolvedValue(true);
 
       await desktopConnector.typeText('software-engineer', 'SuperSecretPass123!');
-      
+
       // Confirm typed text did not get recorded directly to audit request logs
       expect(recordSpy).toHaveBeenCalledWith(expect.objectContaining({
         params: expect.objectContaining({
