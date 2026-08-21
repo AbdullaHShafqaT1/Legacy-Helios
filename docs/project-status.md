@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1–9 Complete)
+# Jarvis OS Project Status (Phases 1–11 Complete)
 
-This living status document captures the completion state of **Jarvis Phases 1 through 8**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phases 1 through 11**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -58,9 +58,12 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **9.3** | Health Monitor: Added `HealthMonitor` in `core/src/lib/` tracking restarts, state transitions, and logging status. | **COMPLETE** |
 | **9.4** | Idempotent Grful Shutdown & Recovery: Added robust SIGINT/SIGTERM handlers and bootstrap recovery. | **COMPLETE** |
 | **9.5** | Agent & CLI Integration: Added `jarvis screen` / `jarvis health` commands and integrated screenshot queries to `ResearcherAgent`. | **COMPLETE** |
+| **10.1** | Controlled Desktop Input: Implemented `DesktopConnector` and `scripts/desktop_input.ps1` with coordinate bounds, 15s freshness checks, confirmation tiers, runaway limits, and emergency stops. | **COMPLETE** |
+| **11.1** | User-Override Safety Gate: Low-level Windows global input hook with injected event flag parsing (`LLKHF_INJECTED`/`LLMHF_INJECTED`) and mouse move sensitivity checking. | **COMPLETE** |
+| **11.2** | Hands-Free Voice Upgrade: Continuous turn-taking listener with silence timeouts, barge-in, and voice-triggered emergency stop controls. | **COMPLETE** |
 
 ### Total Project Test Count:
-**206 tests** pass successfully across **35 test files** inside the repository.
+**227 tests** pass successfully across **37 test files** inside the repository.
 
 ---
 
@@ -166,6 +169,9 @@ The table below provides the authoritative final resolution status for all carry
 | **11. Local Speech/Wake/TTS integration** | **RESOLVED (Phase 8)** | Replaced skeletal plumbing wrappers with real local engines: openWakeWord for wake word, Whisper-tiny for STT, and pyttsx3 for TTS. All tests verified against generated WAV audio fixtures. |
 | **12. Linear-scan vector search cost at scale** | **STILL DEFERRED** | Cosine similarity computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW) is deferred. |
 | **13. Secrets pattern matching regex gaps** | **STILL DEFERRED** | Redaction scanner relies on regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
+| **14. Boot-on-startup / OS service registration** | **STILL DEFERRED** | Explicitly de-scoped from Phase 11; flagged for future phases. |
+| **15. System tray icon / desktop overlay UI** | **STILL DEFERRED** | Explicitly de-scoped from Phase 11; flagged for future phases. |
+| **16. Linux/macOS desktop input control** | **STILL DEFERRED** | Explicitly de-scoped; native PowerShell event injection remains Windows-only. |
 
 ---
 
@@ -196,7 +202,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Readability** | **PASS** | Documented code comments, clean control flow, and explicit logging. |
 | **Naming** | **PASS** | Adheres strictly to project standards (camelCase variables, snake_case DB columns, lowercase python files). |
 | **Documentation** | **PASS** | Updated Sub-task Completion Index, carry-forward status ledger, self-review scorecard, and limitations. |
-| **Testing** | **PASS** | Total test suite reaches **206 tests across 35 files**, verifying the real speech engines offline and GDI screenshot capabilities. |
+| **Testing** | **PASS** | Total test suite reaches **227 tests across 37 files**, verifying safety overrides, continuous voice turn-taking, and desktop coordinate limits. |
 | **Edge Cases** | **PASS** | Handled COM deadlock issues in SAPI5 on Windows, bypassed ffmpeg dependency, and gated display-fallback routines cleanly. |
 | **Best Practices** | **PASS** | Safe resource cleanup (deleting COM references, killing child processes, cleaning temp files, and idempotent DB closure). |
 | **Future Compatibility** | **PASS** | Standard AudioEngine and Vision interfaces remain fully compatible with potential cloud/alternate local engines or desktop agent execution models. |

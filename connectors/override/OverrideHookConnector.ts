@@ -117,6 +117,73 @@ export class OverrideHookConnector extends EventEmitter {
     this.logger.info('OverrideHookConnector stopped.');
   }
 
+  async startInTestMode(): Promise<void> {
+    const config = loadConfig(false);
+    this.status = 'installing';
+    const scriptPath = path.resolve(config.projectRoot, 'scripts/input_hook.ps1');
+
+    return new Promise<void>((resolve, reject) => {
+      this.process = spawn('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        'TEST_MODE'
+      ]);
+
+      let isResolved = false;
+
+      this.process.stdout?.on('data', (data) => {
+        const lines = data.toString().split(/\r?\n/);
+        for (let line of lines) {
+          line = line.trim();
+          if (!line) continue;
+
+          this.logger.debug(`Hook test process output line: ${line}`);
+
+          if (line.includes('HOOK_ACTIVE')) {
+            this.status = 'active';
+            isResolved = true;
+            resolve();
+          }
+
+          if (line.includes('OVERRIDE:')) {
+            this.logger.warn(`GENUINE hardware input override detected in test! [${line}]`);
+            this.emit('override', line);
+            this.eventBus.emit('queue:emergency-stop');
+          }
+        }
+      });
+
+      this.process.stderr?.on('data', (data) => {
+        const errStr = data.toString().trim();
+        this.logger.error(`Hook test process error: ${errStr}`);
+      });
+
+      this.process.on('close', (code) => {
+        if (!isResolved) {
+          this.status = 'failed';
+          reject(new Error(`Failed in test mode: code ${code}`));
+        } else {
+          this.status = 'inactive';
+        }
+      });
+    });
+  }
+
+  sendTestKey(vkCode: number, flags: number) {
+    if (this.process && this.process.stdin) {
+      this.process.stdin.write(`TEST_KEY:${vkCode},${flags}\r\n`);
+    }
+  }
+
+  sendTestMouse(x: number, y: number, flags: number, isMove: boolean) {
+    if (this.process && this.process.stdin) {
+      this.process.stdin.write(`TEST_MOUSE:${x},${y},${flags},${isMove}\r\n`);
+    }
+  }
+
   // Support simulated events for tests
   simulateOverrideEvent(type: string) {
     this.logger.info(`Simulated override event: ${type}`);

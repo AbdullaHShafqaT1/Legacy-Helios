@@ -203,10 +203,16 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   
   overrideHookConnector.start()
     .then(() => {
-      healthMonitor.transition('override', 'HEALTHY');
+      const current = healthMonitor.getStatus('override')?.state;
+      if (current !== 'STOPPED' && current !== 'STOPPING') {
+        healthMonitor.transition('override', 'HEALTHY');
+      }
     })
     .catch(err => {
-      healthMonitor.transition('override', 'FAILED', err.message);
+      const current = healthMonitor.getStatus('override')?.state;
+      if (current !== 'STOPPED' && current !== 'STOPPING') {
+        healthMonitor.transition('override', 'FAILED', err.message);
+      }
     });
 
   healthMonitor.transition('core', 'HEALTHY');

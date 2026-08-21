@@ -22,16 +22,14 @@ public class InputHook {
 
     public delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-    public static event Action<string> OnGenuineInput;
-
     [StructLayout(LayoutKind.Sequential)]
-    private struct POINT {
+    public struct POINT {
         public int x;
         public int y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MSLLHOOKSTRUCT {
+    public struct MSLLHOOKSTRUCT {
         public POINT pt;
         public uint mouseData;
         public uint flags;
@@ -40,7 +38,7 @@ public class InputHook {
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct KBDLLHOOKSTRUCT {
+    public struct KBDLLHOOKSTRUCT {
         public uint vkCode;
         public uint scanCode;
         public uint flags;
@@ -77,20 +75,18 @@ public class InputHook {
         Application.Exit();
     }
 
-    private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+    public static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
         if (nCode >= 0) {
             KBDLLHOOKSTRUCT kb = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
             bool isInjected = (kb.flags & 0x10) != 0 || (kb.flags & 0x02) != 0;
             if (!isInjected) {
-                if (OnGenuineInput != null) {
-                    OnGenuineInput("KEY:" + kb.vkCode);
-                }
+                Console.WriteLine("OVERRIDE:KEY:" + kb.vkCode);
             }
         }
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
     }
 
-    private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+    public static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
         if (nCode >= 0) {
             MSLLHOOKSTRUCT ms = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
             bool isInjected = (ms.flags & 0x01) != 0 || (ms.flags & 0x02) != 0;
@@ -99,20 +95,37 @@ public class InputHook {
                     int dx = Math.Abs(ms.pt.x - _lastX);
                     int dy = Math.Abs(ms.pt.y - _lastY);
                     if (_lastX != -1 && (dx > _moveThreshold || dy > _moveThreshold)) {
-                        if (OnGenuineInput != null) {
-                            OnGenuineInput("MOUSE_MOVE");
-                        }
+                        Console.WriteLine("OVERRIDE:MOUSE_MOVE");
                     }
                     _lastX = ms.pt.x;
                     _lastY = ms.pt.y;
                 } else {
-                    if (OnGenuineInput != null) {
-                        OnGenuineInput("MOUSE_CLICK");
-                    }
+                    Console.WriteLine("OVERRIDE:MOUSE_CLICK");
                 }
             }
         }
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+    }
+
+    public static void TestTriggerKeyboard(uint vkCode, uint flags) {
+        KBDLLHOOKSTRUCT kb = new KBDLLHOOKSTRUCT();
+        kb.vkCode = vkCode;
+        kb.flags = flags;
+        IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf(kb));
+        Marshal.StructureToPtr(kb, ptr, false);
+        KeyboardHookCallback(0, IntPtr.Zero, ptr);
+        Marshal.FreeHGlobal(ptr);
+    }
+
+    public static void TestTriggerMouse(int x, int y, uint flags, bool isMove) {
+        MSLLHOOKSTRUCT ms = new MSLLHOOKSTRUCT();
+        ms.pt = new POINT { x = x, y = y };
+        ms.flags = flags;
+        IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf(ms));
+        Marshal.StructureToPtr(ms, ptr, false);
+        IntPtr wParam = isMove ? (IntPtr)0x0200 : (IntPtr)0x0201;
+        MouseHookCallback(0, wParam, ptr);
+        Marshal.FreeHGlobal(ptr);
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -132,10 +145,24 @@ public class InputHook {
 
 Add-Type -TypeDefinition $Signature -ReferencedAssemblies "System.Windows.Forms", "System.Drawing" -ErrorAction SilentlyContinue
 
-[InputHook]::add_OnGenuineInput({
-    param($type)
-    Write-Output "OVERRIDE:$type"
-})
+if ($args[0] -eq "TEST_MODE") {
+    Write-Output "HOOK_ACTIVE"
+    $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
+    while ($null -ne ($line = $reader.ReadLine())) {
+        if ($line.StartsWith("TEST_KEY:")) {
+            $parts = $line.Substring(9).Split(',')
+            [InputHook]::TestTriggerKeyboard([uint32]$parts[0], [uint32]$parts[1])
+        }
+        elseif ($line.StartsWith("TEST_MOUSE:")) {
+            $parts = $line.Substring(11).Split(',')
+            [InputHook]::TestTriggerMouse([int]$parts[0], [int]$parts[1], [uint32]$parts[2], [bool]::Parse($parts[3]))
+        }
+        elseif ($line -eq "EXIT") {
+            break
+        }
+    }
+    exit 0
+}
 
 $threshold = 10
 if ($args[0]) {

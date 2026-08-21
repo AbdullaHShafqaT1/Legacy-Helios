@@ -186,4 +186,64 @@ describe('Phase 11: Safety Override Hooks & Turn-Taking Voice tests', () => {
       expect(commandCount).toBe(1);
     });
   });
+
+  describe('PowerShell Input Hook Low-Level Injected Flag Checks', () => {
+    it('should NOT trigger override for synthetic/injected input events', async () => {
+      if (process.platform !== 'win32') return;
+
+      const testHook = new OverrideHookConnector({
+        eventBus: ctx.eventBus,
+        logger,
+      });
+
+      await testHook.startInTestMode();
+
+      let overrideFired = false;
+      testHook.on('override', () => { overrideFired = true; });
+
+      // Send injected/synthetic Escape key (vkCode 27, flags = 0x10)
+      testHook.sendTestKey(27, 0x10);
+
+      // Send injected/synthetic Mouse click (flags = 0x01)
+      testHook.sendTestMouse(100, 100, 0x01, false);
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(overrideFired).toBe(false);
+
+      await testHook.stop();
+    });
+
+    it('should trigger override for genuine keyboard and mouse input events', async () => {
+      if (process.platform !== 'win32') return;
+
+      const testHook = new OverrideHookConnector({
+        eventBus: ctx.eventBus,
+        logger,
+      });
+
+      await testHook.startInTestMode();
+
+      let overrideEvents: string[] = [];
+      testHook.on('override', (evt) => { overrideEvents.push(evt); });
+
+      // Send genuine Escape key (vkCode 27, flags = 0x00)
+      testHook.sendTestKey(27, 0x00);
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(overrideEvents).toContain('OVERRIDE:KEY:27');
+
+      // Send genuine mouse movement (delta > threshold 10)
+      testHook.sendTestMouse(100, 100, 0x00, true);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      testHook.sendTestMouse(120, 100, 0x00, true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(overrideEvents.some(evt => evt.includes('MOUSE_MOVE'))).toBe(true);
+
+      await testHook.stop();
+    });
+  });
 });
