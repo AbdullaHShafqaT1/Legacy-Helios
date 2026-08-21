@@ -38,6 +38,11 @@ describe('Desktop Interaction E2E Integration and Safety tests', () => {
 
     // Trigger a fresh mockup vision observation to satisfy freshness constraints (max age 15s)
     await ctx.computerVisionConnector.captureScreen('software-engineer');
+
+    // Mock global override hook to active to allow normal operations in test sequence
+    if (ctx.overrideHookConnector) {
+      vi.spyOn(ctx.overrideHookConnector, 'getStatus').mockReturnValue('active');
+    }
   });
 
   describe('Coordinate Safety and Bounding Checks', () => {

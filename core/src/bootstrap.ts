@@ -27,6 +27,7 @@ import { BrowserOperatorAgent } from '../../agents/browser-operator/BrowserOpera
 import { TerminalOperatorAgent } from '../../agents/terminal-operator/TerminalOperatorAgent.js';
 import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionConnector.js';
 import { DesktopConnector } from '../../connectors/desktop/DesktopConnector.js';
+import { OverrideHookConnector } from '../../connectors/override/OverrideHookConnector.js';
 import { HealthMonitor } from './lib/health.js';
 
 export interface CliContext {
@@ -49,6 +50,7 @@ export interface JarvisContext extends CliContext {
   terminalConnector: TerminalConnector;
   computerVisionConnector: ComputerVisionConnector;
   desktopConnector: DesktopConnector;
+  overrideHookConnector: OverrideHookConnector;
   healthMonitor: HealthMonitor;
   shutdown: () => Promise<void>;
 }
@@ -180,10 +182,16 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('vision-connector', config.logLevel),
   });
 
+  const overrideHookConnector = new OverrideHookConnector({
+    eventBus,
+    logger: createLogger('override-hook-connector', config.logLevel),
+  });
+
   const desktopConnector = new DesktopConnector({
     gatekeeper,
     auditLog,
     visionConnector: computerVisionConnector,
+    overrideHookConnector,
     logger: createLogger('desktop-connector', config.logLevel),
   });
 
@@ -192,6 +200,15 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   healthMonitor.transition('vision', 'HEALTHY');
   healthMonitor.transition('desktop', 'HEALTHY');
   healthMonitor.transition('voice', 'HEALTHY');
+  
+  overrideHookConnector.start()
+    .then(() => {
+      healthMonitor.transition('override', 'HEALTHY');
+    })
+    .catch(err => {
+      healthMonitor.transition('override', 'FAILED', err.message);
+    });
+
   healthMonitor.transition('core', 'HEALTHY');
 
   const softwareEngineer = new SoftwareEngineerAgent(
@@ -327,6 +344,15 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       healthMonitor.transition('desktop', 'FAILED', err.message);
     }
 
+    // Terminate override hooks
+    healthMonitor.transition('override', 'STOPPING');
+    try {
+      await overrideHookConnector.stop();
+      healthMonitor.transition('override', 'STOPPED');
+    } catch (err: any) {
+      healthMonitor.transition('override', 'FAILED', err.message);
+    }
+
     // Terminate active terminal shells
     healthMonitor.transition('terminal', 'STOPPING');
     try {
@@ -368,6 +394,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     terminalConnector,
     computerVisionConnector,
     desktopConnector,
+    overrideHookConnector,
     healthMonitor,
     shutdown,
   };

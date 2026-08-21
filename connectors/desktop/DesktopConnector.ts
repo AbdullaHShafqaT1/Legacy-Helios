@@ -8,10 +8,13 @@ import { AgentRole } from '../../core/src/permissions/policy.js';
 import { loadConfig } from '../../core/src/lib/config.js';
 import { ComputerVisionConnector } from '../vision/ComputerVisionConnector.js';
 
+import { OverrideHookConnector } from '../override/OverrideHookConnector.js';
+
 export interface DesktopConnectorOptions {
   gatekeeper: PermissionGatekeeper;
   auditLog: AuditLog;
   visionConnector: ComputerVisionConnector;
+  overrideHookConnector?: OverrideHookConnector;
   logger: any;
 }
 
@@ -27,6 +30,7 @@ export class DesktopConnector {
   private gatekeeper: PermissionGatekeeper;
   private auditLog: AuditLog;
   private visionConnector: ComputerVisionConnector;
+  private overrideHookConnector?: OverrideHookConnector;
   private logger: any;
   private actionCount = 0;
   private emergencyStopped = false;
@@ -35,6 +39,7 @@ export class DesktopConnector {
     this.gatekeeper = options.gatekeeper;
     this.auditLog = options.auditLog;
     this.visionConnector = options.visionConnector;
+    this.overrideHookConnector = options.overrideHookConnector;
     this.logger = options.logger;
   }
 
@@ -57,6 +62,17 @@ export class DesktopConnector {
     // 0. Emergency Stop check
     if (this.emergencyStopped) {
       return { granted: false, error: 'Rejection: Action blocked due to active emergency-stop condition.', correlationId: 'n-a' };
+    }
+
+    // 0b. Fail closed check
+    if (process.platform === 'win32' && config.desktopControlEnabled) {
+      if (!this.overrideHookConnector || this.overrideHookConnector.getStatus() !== 'active') {
+        return {
+          granted: false,
+          error: 'Rejection: Global input override safety hook is not active or failed to load. Desktop control is locked to fail-closed.',
+          correlationId: 'n-a'
+        };
+      }
     }
 
     // 1. Enable check

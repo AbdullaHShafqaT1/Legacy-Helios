@@ -10,7 +10,7 @@ import { LocalAudioEngine } from './core/src/voice/engines/LocalAudioEngine.js';
 import { VoiceManager } from './core/src/voice/VoiceManager.js';
 import pino from 'pino';
 
-const MODEL    = process.env.JARVIS_OLLAMA_MODEL    ?? 'llava:latest';
+const MODEL = process.env.JARVIS_OLLAMA_MODEL ?? 'llava:latest';
 const BASE_URL = process.env.JARVIS_OLLAMA_BASE_URL ?? 'http://localhost:11434';
 
 const logger = pino({ level: 'warn' });
@@ -43,7 +43,7 @@ async function respond(userMessage: string, voiceManager: VoiceManager): Promise
   } catch (err: any) {
     const errMsg = 'Sorry, I had trouble processing that.';
     console.error(`[Error] ${err.message}`);
-    await voiceManager.speak(errMsg).catch(() => {});
+    await voiceManager.speak(errMsg).catch(() => { });
   }
 }
 

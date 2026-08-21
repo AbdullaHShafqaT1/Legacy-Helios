@@ -1,5 +1,6 @@
 import { Logger } from 'pino';
 import { EventEmitter } from 'node:events';
+import { JarvisEventBus } from '../events/bus.js';
 
 export interface AudioEngine extends EventEmitter {
   init(): Promise<void>;
@@ -15,6 +16,9 @@ export interface AudioEngine extends EventEmitter {
 export interface VoiceManagerConfig {
   sttConfidenceThreshold: number;
   wakeWordSensitivity: number;
+  continuousListening?: boolean;
+  continuousTimeoutMs?: number;
+  eventBus?: JarvisEventBus;
 }
 
 export class VoiceManager extends EventEmitter {
@@ -22,6 +26,7 @@ export class VoiceManager extends EventEmitter {
   private logger: Logger;
   private config: VoiceManagerConfig;
   private isListeningForCommand = false;
+  private continuousTimer: NodeJS.Timeout | null = null;
 
   constructor(engine: AudioEngine, logger: Logger, config: VoiceManagerConfig) {
     super();
@@ -42,18 +47,38 @@ export class VoiceManager extends EventEmitter {
     this.logger.info('VoiceManager initialized and listening for wake word.');
   }
 
+  stopListening(): void {
+    this.engine.stopListening();
+  }
+
   async speak(text: string): Promise<void> {
     try {
       await this.engine.speak(text);
     } catch (err: any) {
       this.logger.error({ err }, 'TTS playback failed. Falling back to text output.');
       console.log(`[Jarvis Speaks]: ${text}`);
+    } finally {
+      if (this.config.continuousListening) {
+        this.isListeningForCommand = true;
+        this.refreshContinuousTimer();
+      }
     }
+  }
+
+  private refreshContinuousTimer() {
+    if (this.continuousTimer) {
+      clearTimeout(this.continuousTimer);
+    }
+    const timeout = this.config.continuousTimeoutMs ?? 10000;
+    this.continuousTimer = setTimeout(() => {
+      this.logger.info('Continuous listening turn-taking timed out. Returning to wake word mode.');
+      this.isListeningForCommand = false;
+      this.continuousTimer = null;
+    }, timeout);
   }
 
   private handleWakeWord(): void {
     this.logger.info('Wake word detected.');
-    // Barge-in: interrupt any ongoing TTS
     this.engine.stopSpeaking();
     
     this.isListeningForCommand = true;
@@ -62,10 +87,28 @@ export class VoiceManager extends EventEmitter {
 
   private handleTranscription(text: string, confidence: number): void {
     if (!this.isListeningForCommand) {
-      return; // Ignore if wake word hasn't triggered
+      return;
     }
-    
-    this.logger.info({ transcription: text, confidence }, 'Received transcription');
+
+    if (this.continuousTimer) {
+      clearTimeout(this.continuousTimer);
+      this.continuousTimer = null;
+    }
+
+    const commandText = text.trim().toLowerCase();
+
+    // Voice-triggered stop (halting is allowed, approval is blocked)
+    if (commandText === 'stop' || commandText === 'cancel') {
+      this.logger.warn(`Voice-triggered emergency-stop command received: "${text}"`);
+      this.engine.stopSpeaking();
+      this.isListeningForCommand = false;
+      if (this.config.eventBus) {
+        this.config.eventBus.emit('queue:emergency-stop');
+      }
+      this.emit('stop');
+      return;
+    }
+
     this.isListeningForCommand = false;
 
     if (!text || text.trim() === '') {
