@@ -415,6 +415,9 @@ Before pushing commits or submitting pull requests, developers must run the exac
 8. **Windows Process-Tree Kill**: On Windows, `TerminalConnector.killAll()` uses `taskkill /pid <pid> /f /t` to terminate subprocess trees. On Unix, `SIGKILL` is used. Exit handlers remove entries from `activeProcesses` after termination — `killAll()` only marks them as killed.
 9. **Browser Headless Mode**: `BrowserConnector` operates in headless mode by default (`JARVIS_BROWSER_HEADLESS=true`). Non-headless operation is configurable but untested.
 10. **Real-Restart Test (Objective 2 Limitation):** True OS-level process boundary traversal restart testing (e.g., launching the Orchestrator daemon via `child_process`, halting it via `SIGKILL` while a task is mid-flight, respawning it, and asserting recovery) is not implemented. Task resumption is simulated in-process via child-process DB manipulation. Writing a full multi-process daemon harness is deferred.
+11. **Low-Level Hook Registration Unverified**: Hook handler tests run `input_hook.ps1` in `TEST_MODE` to assert bitwise flag checks via direct stdin pointer structure construction. End-to-end event redirection and delivery registration via `SetWindowsHookEx` are not verified using actual physical user inputs due to automated test harness limits.
+12. **Win32-Only Safety Override Scoping**: On non-Windows OSes, `OverrideHookConnector` starts in a mock bypass mode that sets the state to 'active' immediately. If desktop interaction is expanded to macOS/Linux, native unmanaged OS-level event listeners must be written to avoid safety bypasses.
+13. **Parallel Test Runner Timeout Susceptibility**: Launching the entire test suite concurrently on restricted CI/CD nodes can saturate CPU/IO capacity, leading to timeouts in tests invoking external child processes. Tests should run sequentially or with concurrency limited to 2 workers.
 
 ---
 
