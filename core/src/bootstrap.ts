@@ -29,6 +29,7 @@ import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionC
 import { DesktopConnector } from '../../connectors/desktop/DesktopConnector.js';
 import { OverrideHookConnector } from '../../connectors/override/OverrideHookConnector.js';
 import { HealthMonitor } from './lib/health.js';
+import { WorkspaceManager } from './workspace/WorkspaceManager.js';
 
 export interface CliContext {
   config: Config;
@@ -52,6 +53,7 @@ export interface JarvisContext extends CliContext {
   desktopConnector: DesktopConnector;
   overrideHookConnector: OverrideHookConnector;
   healthMonitor: HealthMonitor;
+  workspaceManager: WorkspaceManager;
   shutdown: () => Promise<void>;
 }
 
@@ -151,6 +153,21 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('filesystem-connector', config.logLevel),
   });
 
+  const workspaceManager = new WorkspaceManager(db, createLogger('workspace-manager', config.logLevel));
+
+  // If an active workspace is set, use its root for filesystem/terminal scoping
+  const activeWorkspace = workspaceManager.getActiveWorkspace();
+  const effectiveProjectRoot = activeWorkspace ? activeWorkspace.rootPath : config.projectRoot;
+
+  const workspaceScopedFilesystem = activeWorkspace
+    ? new FilesystemConnector({
+        projectRoot: effectiveProjectRoot,
+        gatekeeper,
+        auditLog,
+        logger: createLogger('filesystem-connector', config.logLevel),
+      })
+    : filesystemConnector;
+
   const kanbanConnector = new KanbanConnector(
     db,
     gatekeeper,
@@ -168,7 +185,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   });
 
   const terminalConnector = new TerminalConnector({
-    projectRoot: config.projectRoot,
+    projectRoot: effectiveProjectRoot,
     gatekeeper,
     auditLog,
     logger: createLogger('terminal-connector', config.logLevel),
@@ -229,7 +246,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
 
   const researcher = new ResearcherAgent(
     modelRouter,
-    filesystemConnector,
+    workspaceScopedFilesystem,
     memoryManager,
     createLogger('agent:researcher', config.logLevel),
     messageRouter,
@@ -241,7 +258,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
 
   const codeReviewer = new CodeReviewerAgent(
     modelRouter,
-    filesystemConnector,
+    workspaceScopedFilesystem,
     messageRouter,
     createLogger('agent:code-reviewer', config.logLevel)
   );
@@ -402,6 +419,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     desktopConnector,
     overrideHookConnector,
     healthMonitor,
+    workspaceManager,
     shutdown,
   };
 }

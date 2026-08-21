@@ -17,7 +17,8 @@
     "core/test/**/*",
     "agents/**/*",
     "connectors/**/*",
-    "cli/**/*"
+    "cli/**/*",
+    "services/**/*"
   ],
   "exclude": [
     "node_modules",

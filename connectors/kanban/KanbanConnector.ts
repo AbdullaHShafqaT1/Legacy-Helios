@@ -25,6 +25,8 @@ export interface KanbanColumn {
 export interface KanbanBoard {
   id: string;
   name: string;
+  /** Null = global / not workspace-scoped (backward-compat with pre-Phase-12 boards). */
+  workspaceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,7 +45,8 @@ export class KanbanConnector {
     auditLog: AuditLog,
     logger: Logger,
     defaultBoardId = 'default-board',
-    defaultBoardName = 'Default Board'
+    defaultBoardName = 'Default Board',
+    private readonly defaultWorkspaceId: string | null = null
   ) {
     this.db = db;
     this.gatekeeper = gatekeeper;
@@ -77,7 +80,7 @@ export class KanbanConnector {
     return decision.correlationId;
   }
 
-  async initDefaultBoard(actor: string, boardId = this.defaultBoardId, name = this.defaultBoardName): Promise<void> {
+  async initDefaultBoard(actor: string, boardId = this.defaultBoardId, name = this.defaultBoardName, workspaceId: string | null = this.defaultWorkspaceId): Promise<void> {
     const existing = this.db.prepare('SELECT id FROM kanban_boards WHERE id = ?').get(boardId);
     if (existing) return;
 
@@ -87,8 +90,8 @@ export class KanbanConnector {
     try {
       this.db.transaction(() => {
         this.db.prepare(`
-          INSERT INTO kanban_boards (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
-        `).run(boardId, name, now, now);
+          INSERT INTO kanban_boards (id, name, workspace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+        `).run(boardId, name, workspaceId ?? null, now, now);
 
         const columns = ['Todo', 'In Progress', 'Review', 'Done'];
         columns.forEach((colName, index) => {
@@ -218,5 +221,21 @@ export class KanbanConnector {
     });
 
     return report;
+  }
+
+  /**
+   * Returns all boards associated with a specific workspace.
+   */
+  getBoardsForWorkspace(workspaceId: string): KanbanBoard[] {
+    const rows = this.db
+      .prepare('SELECT id, name, workspace_id, created_at, updated_at FROM kanban_boards WHERE workspace_id = ? ORDER BY created_at ASC')
+      .all(workspaceId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      workspaceId: r.workspace_id ?? null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
   }
 }

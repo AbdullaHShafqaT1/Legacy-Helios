@@ -35,6 +35,7 @@ export interface TaskRow {
   updated_at: string;
   sequence_id: number;
   source: 'cli' | 'voice';
+  workspace_id?: string | null;
 }
 
 /**
@@ -48,6 +49,7 @@ export interface EnqueueInput {
   dependsOn?: string;
   maxRetries?: number;
   source?: 'cli' | 'voice';
+  workspaceId?: string | null;
 }
 
 /**
@@ -105,23 +107,58 @@ export class TaskQueue {
     const fileContextStr = input.fileContext !== undefined ? JSON.stringify(input.fileContext) : null;
     const now = new Date().toISOString();
 
-    const insertStmt = this.db.prepare(`
-      INSERT INTO tasks (
-        id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id, source
-      ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks), ?)
-    `);
+    // Determine workspace ID from input or active_workspace sentinel
+    let workspaceId: string | null = input.workspaceId ?? null;
+    if (!workspaceId) {
+      try {
+        const activeRow = this.db.prepare('SELECT workspace_id FROM active_workspace WHERE id = 1').get() as { workspace_id: string | null } | undefined;
+        if (activeRow) {
+          workspaceId = activeRow.workspace_id;
+        }
+      } catch {
+        // Table or row doesn't exist
+      }
+    }
 
-    insertStmt.run(
-      taskId,
-      input.description.trim(),
-      fileContextStr,
-      input.priority ?? 0,
-      input.dependsOn ?? null,
-      input.maxRetries ?? 3,
-      now,
-      now,
-      input.source ?? 'cli'
-    );
+    const tableInfo = this.db.pragma('table_info(tasks)') as { name: string }[];
+    const hasWorkspaceCol = tableInfo.some(col => col.name === 'workspace_id');
+
+    if (hasWorkspaceCol) {
+      const insertStmt = this.db.prepare(`
+        INSERT INTO tasks (
+          id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id, source, workspace_id
+        ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks), ?, ?)
+      `);
+      insertStmt.run(
+        taskId,
+        input.description.trim(),
+        fileContextStr,
+        input.priority ?? 0,
+        input.dependsOn ?? null,
+        input.maxRetries ?? 3,
+        now,
+        now,
+        input.source ?? 'cli',
+        workspaceId
+      );
+    } else {
+      const insertStmt = this.db.prepare(`
+        INSERT INTO tasks (
+          id, description, file_context, status, priority, depends_on, retries, max_retries, created_at, updated_at, sequence_id, source
+        ) VALUES (?, ?, ?, 'pending', ?, ?, 0, ?, ?, ?, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM tasks), ?)
+      `);
+      insertStmt.run(
+        taskId,
+        input.description.trim(),
+        fileContextStr,
+        input.priority ?? 0,
+        input.dependsOn ?? null,
+        input.maxRetries ?? 3,
+        now,
+        now,
+        input.source ?? 'cli'
+      );
+    }
 
     const inserted = this.getById(taskId);
     if (!inserted) {

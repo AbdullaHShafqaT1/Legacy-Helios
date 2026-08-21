@@ -29,6 +29,8 @@ export interface StoreMemoryInput {
   sourceAgent: string;
   sourceTaskId?: string | null;
   tag?: string;
+  /** Optional workspace scope. Stored as workspace_id on the row. */
+  workspaceId?: string | null;
 }
 
 export interface MemoryEntry {
@@ -39,12 +41,16 @@ export interface MemoryEntry {
   sourceTaskId: string | null;
   tag: string;
   timestamp: string;
+  /** Workspace this entry belongs to (null = no workspace / global). */
+  workspaceId: string | null;
 }
 
 export interface MemoryQueryFilters {
   tag?: string;
   sourceAgent?: string;
   limit?: number;
+  /** When provided, only return entries belonging to this workspace. */
+  workspaceId?: string | null;
 }
 
 /**
@@ -118,7 +124,7 @@ export class MemoryManager {
    * writes the relational row, logs the outcome, and evicts oldest items if growth exceeds limits.
    */
   async store(input: StoreMemoryInput): Promise<string> {
-    const { content, sourceAgent, sourceTaskId = null, tag = '' } = input;
+    const { content, sourceAgent, sourceTaskId = null, tag = '', workspaceId = null } = input;
 
     // 1. Redaction check (runs BEFORE embedding/storing)
     const matchedCategory = this.checkRedaction(content);
@@ -173,11 +179,11 @@ export class MemoryManager {
       const timestamp = new Date().toISOString();
 
       const insertStmt = this.db.prepare(`
-        INSERT INTO memory_entries (id, content, embedding_id, source_agent, source_task_id, tag, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO memory_entries (id, content, embedding_id, source_agent, source_task_id, tag, timestamp, workspace_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      insertStmt.run(id, content, embeddingId, sourceAgent, sourceTaskId, tag, timestamp);
+      insertStmt.run(id, content, embeddingId, sourceAgent, sourceTaskId, tag, timestamp, workspaceId);
 
       // Record successful outcome in Audit Log
       this.auditLog.recordOutcome(
@@ -301,6 +307,13 @@ export class MemoryManager {
         if (filters?.sourceAgent !== undefined && row.source_agent !== filters.sourceAgent) {
           continue;
         }
+        // Workspace scoping: when workspaceId filter is provided, only return entries
+        // belonging to that workspace (null workspaceId in the row is NOT included).
+        if (filters?.workspaceId !== undefined && filters.workspaceId !== null) {
+          if (row.workspace_id !== filters.workspaceId) {
+            continue;
+          }
+        }
 
         resolvedEntries.push({
           id: row.id,
@@ -310,6 +323,7 @@ export class MemoryManager {
           sourceTaskId: row.source_task_id,
           tag: row.tag,
           timestamp: row.timestamp,
+          workspaceId: row.workspace_id ?? null,
         });
 
         if (resolvedEntries.length >= limit) {
@@ -354,6 +368,7 @@ export class MemoryManager {
         sourceTaskId: row.source_task_id,
         tag: row.tag,
         timestamp: row.timestamp,
+        workspaceId: row.workspace_id ?? null,
       };
     } catch (error: any) {
       this.logger.error({ id, err: error }, 'Failed to look up memory by ID.');

@@ -56,6 +56,24 @@ Commands:
   health
     Displays a diagnostic status table of all monitored subsystems.
 
+  service <subcommand>
+    Manages Jarvis autostart service registration.
+    Subcommands:
+      install     Registers Jarvis to start automatically on login (opt-in, interactive session only).
+      uninstall   Removes the autostart registration.
+      status      Reports whether autostart is currently registered.
+    IMPORTANT: On Windows, the Task Scheduler task is configured with LogonType=InteractiveToken
+    and RunOnlyIfLoggedOn=true to ensure the Phase 11 override safety hook (WH_KEYBOARD_LL/
+    WH_MOUSE_LL) can attach. Never reconfigure it to run as a Session-0 background service.
+
+  workspace <subcommand> [args]
+    Manages named project workspaces.
+    Subcommands:
+      create <name> <path>    Register a new workspace anchored at the given path.
+      list                    List all registered workspaces.
+      switch <name>           Set the active workspace (applies to new tasks; in-flight tasks keep their context).
+      remove <name> [--force] Remove a workspace. Blocked if tasks are queued unless --force is passed.
+
   help
     Prints this help message.
 `);
@@ -94,7 +112,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health', 'mouse', 'keyboard'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health', 'mouse', 'keyboard', 'service', 'workspace'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -437,6 +455,75 @@ async function run(): Promise<void> {
       } catch (err: any) {
         console.error('Keyboard action failed:', err.message);
       }
+    } else if (command === 'service') {
+      const subcommand = positional[0]?.trim()?.toLowerCase();
+      if (!subcommand || !['install', 'uninstall', 'status'].includes(subcommand)) {
+        throw new Error('service requires a subcommand: install, uninstall, or status.');
+      }
+
+      const { getPlatformInstaller } = await import('../services/ServiceInstaller.js');
+      const execPath = process.argv[0];
+      const installer = getPlatformInstaller(execPath, process.cwd());
+
+      if (subcommand === 'install') {
+        await installer.install();
+        console.log(`Autostart service installed successfully on ${process.platform}.`);
+        if (process.platform === 'win32') {
+          console.log('Task Scheduler entry uses LogonType=InteractiveToken and RunOnlyIfLoggedOn=true.');
+          console.log('This ensures the Phase 11 override safety hook can attach. Do NOT change this to a Session-0 configuration.');
+        }
+      } else if (subcommand === 'uninstall') {
+        await installer.uninstall();
+        console.log('Autostart service uninstalled.');
+      } else if (subcommand === 'status') {
+        const installed = await installer.isInstalled();
+        console.log(`Autostart service: ${installed ? 'INSTALLED' : 'NOT INSTALLED'}`);
+      }
+
+    } else if (command === 'workspace') {
+      const subcommand = positional[0]?.trim()?.toLowerCase();
+      if (!subcommand || !['create', 'list', 'switch', 'remove'].includes(subcommand)) {
+        throw new Error('workspace requires a subcommand: create, list, switch, or remove.');
+      }
+
+      const { WorkspaceManager } = await import('../core/src/workspace/WorkspaceManager.js');
+      const wm = new WorkspaceManager(ctx!.db, ctx!.logger);
+
+      if (subcommand === 'create') {
+        const name = positional[1]?.trim();
+        const rootPath = positional[2]?.trim();
+        if (!name || !rootPath) {
+          throw new Error('workspace create requires <name> and <path> arguments.');
+        }
+        const ws = wm.createWorkspace(name, rootPath);
+        console.log(`Workspace "${ws.name}" created (id: ${ws.id}, root: ${ws.rootPath}).`);
+
+      } else if (subcommand === 'list') {
+        const workspaces = wm.listWorkspaces();
+        const active = wm.getActiveWorkspace();
+        if (workspaces.length === 0) {
+          console.log('No workspaces registered. Use: jarvis workspace create <name> <path>');
+        } else {
+          for (const ws of workspaces) {
+            const isActive = active?.id === ws.id ? ' [ACTIVE]' : '';
+            console.log(`  ${ws.name}${isActive} — ${ws.rootPath} (id: ${ws.id})`);
+          }
+        }
+
+      } else if (subcommand === 'switch') {
+        const name = positional[1]?.trim();
+        if (!name) throw new Error('workspace switch requires <name> argument.');
+        const ws = wm.switchWorkspace(name);
+        console.log(`Active workspace switched to "${ws.name}" (root: ${ws.rootPath}).`);
+        console.log('Note: in-flight tasks keep their original workspace context. New tasks will use this workspace.');
+
+      } else if (subcommand === 'remove') {
+        const name = positional[1]?.trim();
+        if (!name) throw new Error('workspace remove requires <name> argument.');
+        const force = flags['force'] === 'true';
+        wm.removeWorkspace(name, force);
+        console.log(`Workspace "${name}" removed.`);
+      }
     }
   } catch (error: any) {
     process.stderr.write(`Error: ${error?.message || String(error)}\n`);
@@ -449,3 +536,5 @@ async function run(): Promise<void> {
 }
 
 run();
+
+

@@ -154,6 +154,22 @@ export function openDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_kanban_columns_board_id ON kanban_columns (board_id);
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_column_id ON kanban_cards (column_id);
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_task_id ON kanban_cards (task_id);
+
+    -- Phase 12: Workspace registry
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      root_path TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    -- Phase 12: Single-row active workspace sentinel (id = 1 always)
+    CREATE TABLE IF NOT EXISTS active_workspace (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+      CHECK (id = 1)
+    );
+
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
       description TEXT NOT NULL,
@@ -223,6 +239,24 @@ export function openDb(dbPath: string): Database.Database {
   }
 
   db.exec(schemaDdl);
+
+  // Phase 12 migrations: add workspace_id to existing tables if absent
+  const tasksInfo = db.pragma('table_info(tasks)') as { name: string }[];
+  if (!tasksInfo.some(col => col.name === 'workspace_id')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN workspace_id TEXT');
+  }
+
+  const memoryInfo = db.pragma('table_info(memory_entries)') as { name: string }[];
+  if (!memoryInfo.some(col => col.name === 'workspace_id')) {
+    db.exec('ALTER TABLE memory_entries ADD COLUMN workspace_id TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_memory_entries_workspace_id ON memory_entries (workspace_id)');
+  }
+
+  const boardsInfo = db.pragma('table_info(kanban_boards)') as { name: string }[];
+  if (!boardsInfo.some(col => col.name === 'workspace_id')) {
+    db.exec('ALTER TABLE kanban_boards ADD COLUMN workspace_id TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_kanban_boards_workspace_id ON kanban_boards (workspace_id)');
+  }
 
   return db;
 }

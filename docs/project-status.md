@@ -61,9 +61,14 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **10.1** | Controlled Desktop Input: Implemented `DesktopConnector` and `scripts/desktop_input.ps1` with coordinate bounds, 15s freshness checks, confirmation tiers, runaway limits, and emergency stops. | **COMPLETE** |
 | **11.1** | User-Override Safety Gate: Low-level Windows global input hook with injected event flag parsing (`LLKHF_INJECTED`/`LLMHF_INJECTED`) and mouse move sensitivity checking. | **COMPLETE** |
 | **11.2** | Hands-Free Voice Upgrade: Continuous turn-taking listener with silence timeouts, barge-in, and voice-triggered emergency stop controls. | **COMPLETE** |
+| **12.1** | Boot-on-Startup (opt-in): `ServiceInstaller.ts` with platform-specific implementations for Windows Task Scheduler (`LogonType=InteractiveToken` + `RunOnlyIfLoggedOn=true` mandatory guards), Linux systemd user unit, and macOS LaunchAgent. CLI commands `jarvis service install/uninstall/status`. | **COMPLETE** |
+| **12.2** | System Tray Icon: `TrayManager.ts` with graceful headless fallback, status polling from `HealthMonitor`, pending-approval count badge, and emergency stop routed exclusively through the existing `queue:emergency-stop` event bus event. | **COMPLETE** |
+| **12.3** | Multi-Project Workspace Management: `WorkspaceManager.ts` with named workspace registry (SQLite), per-workspace `FilesystemConnector`/`MemoryManager`/`KanbanConnector` scoping, active-workspace orchestrator state, mid-task switch semantics, and `--force` orphan handling. CLI commands `jarvis workspace create/list/switch/remove`. | **COMPLETE** |
 
 ### Total Project Test Count:
-**227 tests** pass successfully across **37 test files** inside the repository.
+**267 tests** pass successfully across **40 test files** inside the repository.
+
+Phase 12 adds 3 new test files: `phase12-workspace.test.ts`, `phase12-service.test.ts`, `phase12-tray.test.ts`.
 
 ---
 
@@ -150,6 +155,7 @@ A future developer picking up work after Phase 8 should review these technical d
 10. **Low-Level Hook Registration Unverified**: Automated test suites invoke `KeyboardHookCallback`/`MouseHookCallback` directly using stdin in `TEST_MODE` to validate unmanaged event structure pointer parsing and bitwise flags logic. However, live hook interception/delivery via `SetWindowsHookEx` is not verified E2E with actual physical hardware-level inputs due to host runner execution constraints.
 11. **Win32-Only Safety Override Scoping**: On non-Windows environments (Linux/macOS), the fail-closed check is bypassed and `OverrideHookConnector` status reports 'active' without registering any native input hooks. Since desktop controls are Windows-only, this bypass is currently accepted, but represents a scoping gap if Linux/macOS desktop execution is introduced.
 12. **Vitest Parallel Resource Contention**: Running the entire test suite in parallel can cause resource contention (competing Playwright sessions, SQLite write locks, SAPI5 COM initialization, and Python ML sub-processes), which may cause slow operations to exceed the default 5-second test timeout. Tests should be run sequentially or with concurrency restricted to 2 workers to guarantee stability.
+13. **Kanban Column-ID Test Isolation Constraint**: Column IDs inside `KanbanConnector` are generated as simple lowercase slugs (e.g. `todo`, `in-progress`) to maintain backwards compatibility with Phase 4's swarms/messaging/kanban integration tests. Because these bare slugs collide when multiple boards exist in the same database instance, Phase 12 workspace isolation tests run on separate in-memory SQLite instances to maintain test isolation without touching the Phase 4 database contract.
 
 ---
 
@@ -172,8 +178,8 @@ The table below provides the authoritative final resolution status for all carry
 | **11. Local Speech/Wake/TTS integration** | **RESOLVED (Phase 8)** | Replaced skeletal plumbing wrappers with real local engines: openWakeWord for wake word, Whisper-tiny for STT, and pyttsx3 for TTS. All tests verified against generated WAV audio fixtures. |
 | **12. Linear-scan vector search cost at scale** | **STILL DEFERRED** | Cosine similarity computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW) is deferred. |
 | **13. Secrets pattern matching regex gaps** | **STILL DEFERRED** | Redaction scanner relies on regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
-| **14. Boot-on-startup / OS service registration** | **STILL DEFERRED** | Explicitly de-scoped from Phase 11; flagged for future phases. |
-| **15. System tray icon / desktop overlay UI** | **STILL DEFERRED** | Explicitly de-scoped from Phase 11; flagged for future phases. |
+| **14. Boot-on-startup / OS service registration** | **RESOLVED (Phase 12)** | `ServiceInstaller.ts` with Windows Task Scheduler (LogonType=InteractiveToken), Linux systemd user unit, macOS LaunchAgent. Interactive-session enforcement is a hard security constraint. |
+| **15. System tray icon / desktop overlay UI** | **RESOLVED (Phase 12)** | `TrayManager.ts` with graceful headless fallback, HealthMonitor status polling, pending-approval badge, emergency stop via existing event bus. |
 | **16. Linux/macOS desktop input control** | **STILL DEFERRED** | Explicitly de-scoped; native PowerShell event injection remains Windows-only. |
 
 ---
