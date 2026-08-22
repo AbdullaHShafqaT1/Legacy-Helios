@@ -43,7 +43,7 @@ export class DuplexAudioServer {
 
     try {
       this.wss = new WebSocketServer({ port });
-      
+
       this.wss.on('connection', (ws) => {
         this.logger.info('Duplex voice client connected.');
         this.activeConnections.add(ws);
@@ -88,12 +88,12 @@ export class DuplexAudioServer {
     let isProcessing = false;
     let isSpeaking = false;
     let silenceSamples = 0;
-    
+
     // Default thresholds for 16kHz 16-bit mono (32000 bytes per second)
     // A 100ms chunk has 1600 samples, which is 3200 bytes.
     const interruptThreshold = this.config.voiceDuplexInterruptThreshold;
     const sampleRate = this.config.voiceAudioSampleRate;
-    
+
     // We expect the client to stream int16 samples.
     ws.on('message', async (data, isBinary) => {
       if (!isBinary) {
@@ -108,7 +108,7 @@ export class DuplexAudioServer {
       }
 
       const pcmBuffer = data as Buffer;
-      
+
       // Calculate RMS amplitude of incoming 16-bit PCM chunk
       const int16Array = new Int16Array(
         pcmBuffer.buffer,
@@ -153,7 +153,7 @@ export class DuplexAudioServer {
         if (silenceDurationMs > 1200 && accumulatedDurationMs > 500 && !isProcessing && !isSpeaking) {
           this.logger.info({ durationMs: accumulatedDurationMs }, 'End of utterance detected. Triggering processing...');
           isProcessing = true;
-          
+
           const audioToProcess = Buffer.concat(pcmAccumulator);
           pcmAccumulator = [];
           silenceSamples = 0;
@@ -190,7 +190,7 @@ export class DuplexAudioServer {
                   const wavBuffer = fs.readFileSync(outputWavPath);
                   ws.send(wavBuffer);
                   isSpeaking = true;
-                  
+
                   // Delete temp output wav
                   try { fs.unlinkSync(outputWavPath); } catch { /* ignore */ }
                 }
@@ -251,7 +251,7 @@ export class DuplexAudioServer {
   private async synthesize(text: string, outWavPath: string): Promise<void> {
     const ttsScript = path.join(__dirname, 'engines', 'tts_synthesize.py');
     const args = [ttsScript, text, '--wav', outWavPath, '--rate', this.config.voiceTtsRate.toString()];
-    
+
     return new Promise((resolve, reject) => {
       const child = spawn('python', args);
       child.on('close', (code) => {
