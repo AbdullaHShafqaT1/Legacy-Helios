@@ -112,7 +112,7 @@ async function run(): Promise<void> {
     process.exit(command ? 0 : 1);
   }
 
-  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health', 'mouse', 'keyboard', 'service', 'workspace'];
+  const validCommands = ['submit', 'status', 'logs', 'stop', 'approve', 'briefing', 'listen', 'screen', 'health', 'mouse', 'keyboard', 'service', 'workspace', 'voice'];
   if (!validCommands.includes(command)) {
     process.stderr.write(`Error: Unrecognized command "${cmdRaw}"\n`);
     printHelp();
@@ -523,6 +523,61 @@ async function run(): Promise<void> {
         const force = flags['force'] === 'true';
         wm.removeWorkspace(name, force);
         console.log(`Workspace "${name}" removed.`);
+      }
+    } else if (command === 'voice') {
+      const subcommand = positional[0]?.trim()?.toLowerCase();
+      if (subcommand === 'benchmark') {
+        const { spawn } = await import('node:child_process');
+        const path = await import('node:path');
+        const fs = await import('node:fs');
+        
+        console.log('Starting Voice Wake-Word Benchmarks...');
+        const fixtures = [
+          { file: 'jarvis_wake.wav', expected: true },
+          { file: 'garbage.wav', expected: false }
+        ];
+
+        const sensitivities = [0.1, 0.5, 0.8];
+        const engines = ['openwakeword', 'custom-energy'];
+
+        for (const engineName of engines) {
+          console.log(`\n================ Engine: ${engineName} ================`);
+          for (const sens of sensitivities) {
+            console.log(`Sensitivity / Threshold: ${sens}`);
+            let correctCount = 0;
+
+            for (const item of fixtures) {
+              const filePath = path.resolve(ctx.config.projectRoot, 'core/test/fixtures', item.file);
+              if (!fs.existsSync(filePath)) {
+                console.log(`  Fixture missing: ${item.file}`);
+                continue;
+              }
+
+              const scriptPath = path.resolve(ctx.config.projectRoot, 'core/src/voice/engines/wake_word_detect.py');
+              const args = [scriptPath, '--engine', engineName, '--wav', filePath, '--threshold', sens.toString()];
+              
+              if (process.env.NODE_ENV === 'test' || process.env.JARVIS_TEST_WAKE_MOCK === 'true') {
+                args.push('--test-mock');
+              }
+
+              const detected = await new Promise<boolean>((resolve) => {
+                const child = spawn('python', args);
+                let stdout = '';
+                child.stdout?.on('data', (d) => { stdout += d.toString(); });
+                child.on('close', () => {
+                  resolve(stdout.includes('WAKE_WORD_DETECTED'));
+                });
+              });
+
+              const passed = detected === item.expected;
+              if (passed) correctCount++;
+              console.log(`  Clip: ${item.file} | Expected: ${item.expected} | Detected: ${detected} | Result: ${passed ? 'PASS' : 'FAIL'}`);
+            }
+            console.log(`Accuracy: ${((correctCount / fixtures.length) * 100).toFixed(0)}%`);
+          }
+        }
+      } else {
+        throw new Error('voice requires a subcommand: benchmark');
       }
     }
   } catch (error: any) {

@@ -15,6 +15,10 @@ import { SqliteVectorStore } from './memory/vectorStore.js';
 import { LocalEmbeddingProvider } from './memory/embeddingProvider.js';
 import { EmbeddingPipeline } from './memory/embeddingPipeline.js';
 import { MemoryManager } from './memory/memoryManager.js';
+import { TrayManager } from '../../services/TrayManager.js';
+import { ClaudeConnector } from '../../connectors/claude-api/ClaudeConnector.js';
+import { PeriodicCaptureManager } from '../../services/PeriodicCaptureManager.js';
+import { SearchConnector } from '../../connectors/search/SearchConnector.js';
 import { KanbanConnector } from '../../connectors/kanban/KanbanConnector.js';
 import { MessageRouter } from './router/messageRouter.js';
 import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
@@ -50,6 +54,8 @@ export interface JarvisContext extends CliContext {
   browserConnector: BrowserConnector;
   terminalConnector: TerminalConnector;
   computerVisionConnector: ComputerVisionConnector;
+  periodicCaptureManager: PeriodicCaptureManager;
+  searchConnector: SearchConnector;
   desktopConnector: DesktopConnector;
   overrideHookConnector: OverrideHookConnector;
   healthMonitor: HealthMonitor;
@@ -122,6 +128,17 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('ollama-connector', config.logLevel),
   });
   modelRouter.register(ollamaConnector);
+
+  if (config.anthropicApiKey) {
+    const claudeConnector = new ClaudeConnector({
+      apiKey: config.anthropicApiKey,
+      model: config.model || 'claude-3-5-sonnet-20240620',
+      maxRetries: config.maxRetries,
+      timeoutMs: config.claudeTimeoutMs,
+      logger: createLogger('claude-connector', config.logLevel),
+    });
+    modelRouter.register(claudeConnector);
+  }
 
   const vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));
   const embeddingProvider = new LocalEmbeddingProvider(config.embeddingDimensions);
@@ -207,6 +224,18 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('vision-connector', config.logLevel),
   });
 
+  const periodicCaptureManager = new PeriodicCaptureManager({
+    computerVisionConnector,
+    gatekeeper,
+    eventBus,
+    memoryManager,
+    modelRouter,
+    logger: createLogger('periodic-capture', config.logLevel),
+    healthMonitor,
+    intervalMs: config.visionPeriodicIntervalMs,
+    retentionMax: config.visionPeriodicRetentionMax,
+  });
+
   const overrideHookConnector = new OverrideHookConnector({
     eventBus,
     logger: createLogger('override-hook-connector', config.logLevel),
@@ -252,6 +281,17 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   );
   agentRouter.register(softwareEngineer, { isDefault: true });
 
+  const searchConnector = new SearchConnector({
+    provider: config.searchProvider as 'tavily' | 'duckduckgo',
+    apiKey: config.searchApiKey,
+    gatekeeper,
+    auditLog,
+    db,
+    logger: createLogger('search-connector', config.logLevel),
+    rateLimitCount: config.searchRateLimitCount,
+    rateLimitWindowMs: config.searchRateLimitWindowMs,
+  });
+
   const researcher = new ResearcherAgent(
     modelRouter,
     workspaceScopedFilesystem,
@@ -260,7 +300,8 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     messageRouter,
     gatekeeper,
     auditLog,
-    computerVisionConnector
+    computerVisionConnector,
+    searchConnector
   );
   agentRouter.register(researcher);
 
@@ -366,6 +407,13 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       healthMonitor.transition('browser', 'FAILED', err.message);
     }
 
+    // Terminate periodic screenshot captures
+    try {
+      periodicCaptureManager.stop();
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to stop periodic capture manager during shutdown.');
+    }
+
     // Terminate desktop sessions
     healthMonitor.transition('desktop', 'STOPPING');
     try {
@@ -424,6 +472,8 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     browserConnector,
     terminalConnector,
     computerVisionConnector,
+    periodicCaptureManager,
+    searchConnector,
     desktopConnector,
     overrideHookConnector,
     healthMonitor,

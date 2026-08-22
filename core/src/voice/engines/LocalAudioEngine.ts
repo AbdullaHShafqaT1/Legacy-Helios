@@ -6,7 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from '../../lib/config.js';
+import { loadConfig, Config } from '../../lib/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +21,7 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   private sttProcess: ChildProcess | null = null;
   private logger: Logger;
   private isListening = false;
+  private activeEngine = '';
 
   public lastSttFallbackUsed = false;
   public lastTtsFallbackUsed = false;
@@ -66,17 +67,48 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
     }
   }
 
+  public getActiveEngine(): string {
+    return this.activeEngine || 'openwakeword';
+  }
+
+  public switchEngine(engineName: string): void {
+    const config = loadConfig(false);
+    this.logger.info({ from: this.getActiveEngine(), to: engineName }, 'Switching wake-word engine');
+    
+    const wasListening = this.isListening;
+    if (this.wakeWordProcess) {
+      this.wakeWordProcess.kill('SIGKILL');
+      this.wakeWordProcess = null;
+    }
+    
+    this.activeEngine = engineName;
+    this.isListening = false;
+    
+    if (wasListening) {
+      this.startListening();
+    }
+  }
+
   startListening(): void {
     if (this.isListening) return;
     this.isListening = true;
 
     const config = loadConfig(false);
-    const wakeScript = path.join(__dirname, 'wake_word_detect.py');
-    const args = [wakeScript];
+    if (!this.activeEngine) {
+      this.activeEngine = config.voiceWakeWordEngine || 'openwakeword';
+    }
+    this.spawnWakeDetector(config);
+  }
 
-    // Support file-based testing via environment variables
+  private spawnWakeDetector(config: Config): void {
+    const wakeScript = path.join(__dirname, 'wake_word_detect.py');
+    const args = [wakeScript, '--engine', this.activeEngine];
+
     if (process.env.JARVIS_WAKE_WAV) {
       args.push('--wav', process.env.JARVIS_WAKE_WAV);
+    }
+    if (process.env.JARVIS_TEST_WAKE_MOCK === 'true') {
+      args.push('--test-mock');
     }
     
     const threshold = process.env.JARVIS_WAKE_WORD_THRESHOLD || 
@@ -84,7 +116,6 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
                       config.voiceWakeWordThreshold.toString();
     args.push('--threshold', threshold);
 
-    // Objective 6: pass configurable parameters to wake word script
     if (config.voiceWakeWordModelPath) {
       args.push('--model-path', config.voiceWakeWordModelPath);
     }
@@ -93,8 +124,15 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
     }
     args.push('--sample-rate', config.voiceAudioSampleRate.toString());
 
-    this.logger.info({ args }, 'Spawning wake word detector process');
+    if (this.activeEngine === 'porcupine') {
+      const key = process.env.JARVIS_PORCUPINE_ACCESS_KEY || config.voicePorcupineAccessKey || '';
+      args.push('--access-key', key);
+    }
+
+    this.logger.info({ args, engine: this.activeEngine }, 'Spawning wake word detector process');
     this.wakeWordProcess = spawn('python', args);
+
+    let stderrBuffer = '';
 
     this.wakeWordProcess.stdout?.on('data', (data) => {
       const output = data.toString();
@@ -104,13 +142,32 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
       }
     });
 
+    this.wakeWordProcess.stderr?.on('data', (data) => {
+      stderrBuffer += data.toString();
+    });
+
     this.wakeWordProcess.on('error', (err) => {
       this.logger.error({ err }, 'Wake word process error');
       this.emit('error', err);
     });
 
-    this.wakeWordProcess.on('close', () => {
+    this.wakeWordProcess.on('close', (code) => {
       this.wakeWordProcess = null;
+
+      if (code !== 0 && code !== null) {
+        this.logger.error({ code, stderr: stderrBuffer, engine: this.activeEngine }, 'Wake word detector process exited with error');
+        
+        if (this.activeEngine !== 'openwakeword') {
+          this.logger.warn('Falling back to openwakeword engine.');
+          this.activeEngine = 'openwakeword';
+          if (this.isListening) {
+            this.isListening = false;
+            this.startListening();
+          }
+        } else {
+          this.emit('error', new Error(`Primary wake word engine openwakeword failed: ${stderrBuffer}`));
+        }
+      }
     });
   }
 

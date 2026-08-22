@@ -1,4 +1,4 @@
-# Legacy's Helios - Jarvis OS Kernel (Phases 1–8 Complete)
+# Legacy's Helios - Jarvis OS Kernel (Phases 1–13 Complete)
 
 > **A modular, autonomous AI Operating System designed for software engineering, automation, scientific research, and deep productivity.**
 
@@ -72,6 +72,14 @@
    - **`JARVIS_BROWSER_LOCAL_ALLOWLIST`**: Comma-separated local hostnames the browser may access without admin gating (default: `localhost,127.0.0.1`).
    - **`JARVIS_TERMINAL_ALLOWLIST`**: Comma-separated commands pre-approved for terminal execution without prompting (default: `echo,ls,pwd,cat,git,npm,npx`).
    - **`JARVIS_TERMINAL_TIMEOUT_MS`**: Maximum execution time in milliseconds for a terminal command before forced kill (default: `30000`).
+  - **`JARVIS_WAKE_WORD_ENGINE`**: Selects the active wake-word engine. Options: `'openwakeword'`, `'porcupine'`, `'custom-energy'` (default: `'openwakeword'`).
+  - **`JARVIS_PORCUPINE_ACCESS_KEY`**: AccessKey required if using the `'porcupine'` wake-word engine.
+  - **`JARVIS_PERIODIC_CAPTURE_INTERVAL_MS`**: Time interval in milliseconds between background screenshot captures (default: `10000`).
+  - **`JARVIS_PERIODIC_CAPTURE_RETENTION_MAX`**: Maximum number of periodic screenshot files to retain on disk in FIFO manner (default: `15`).
+  - **`JARVIS_SEARCH_PROVIDER`**: Outbound search engine API provider. Options: `'tavily'`, `'duckduckgo'` (default: `'duckduckgo'`).
+  - **`JARVIS_TAVILY_API_KEY`**: Developer API key required if using `'tavily'` search provider.
+  - **`JARVIS_SEARCH_RATE_LIMIT_COUNT`**: Maximum queries allowed in the rate limit window (default: `10`).
+  - **`JARVIS_SEARCH_RATE_LIMIT_WINDOW_MS`**: Time window in milliseconds for enforcing search rate limits (default: `60000`).
 
 ---
 
@@ -411,7 +419,7 @@ Before pushing commits or submitting pull requests, developers must run the exac
 4. **Outcome Log Matching**: Audit outcome rows link to decision rows via a generated `correlation_id` rather than hard foreign keys. This design ensures outcome logs remain decoupled from database write-locking triggers on the audit table.
 5. **Linting and Formatters**: Code checks are performed strictly via the TypeScript compiler (`npx tsc --noEmit`). Project-wide ESLint and Prettier configurations are deferred.
 6. **Claude Request Timeout**: Request timeout limits on Claude API connections are deferred until a production latency requirement arises.
-7. **Local-Only Researcher Scope**: The Researcher Agent operates strictly on local filesystem context via `FilesystemConnector`; external web browsing or HTTP fetching is not performed by the Researcher (use `BrowserOperatorAgent` instead).
+7. **Researcher Agent Web Scope**: The Researcher Agent can perform external web searches using `SearchConnector`. Outbound search queries are audited and rate-limited. Ingested content is sanitized via `redactSecrets` and encapsulated inside XML tags.
 8. **Windows Process-Tree Kill**: On Windows, `TerminalConnector.killAll()` uses `taskkill /pid <pid> /f /t` to terminate subprocess trees. On Unix, `SIGKILL` is used. Exit handlers remove entries from `activeProcesses` after termination — `killAll()` only marks them as killed.
 9. **Browser Headless Mode**: `BrowserConnector` operates in headless mode by default (`JARVIS_BROWSER_HEADLESS=true`). Non-headless operation is configurable but untested.
 10. **Real-Restart Test (Objective 2 Limitation):** True OS-level process boundary traversal restart testing (e.g., launching the Orchestrator daemon via `child_process`, halting it via `SIGKILL` while a task is mid-flight, respawning it, and asserting recovery) is not implemented. Task resumption is simulated in-process via child-process DB manipulation. Writing a full multi-process daemon harness is deferred.
@@ -439,4 +447,24 @@ The continuous voice loop moves beyond push-to-talk to offer hands-free turn-tak
 - **Conversation turn-taking**: Once the wake word triggers, Jarvis listens for follow-up commands directly (without repeating the wake word). This session transitions back to wake-word-only mode after `10` seconds of inactivity.
 - **Voice-Triggered Stop**: Spoken commands `"stop"` or `"cancel"` during active tasks immediately halt Jarvis and fire a `queue:emergency-stop` event.
 - **Voice Approval Boundary**: Voice remains **categorically forbidden** from resolving Gatekeeper permissions. Spoken approval attempts will only queue the task into the unattended queue, requiring manual CLI or console-text verification to approve.
+
+
+## 🔒 Phase 13 Integrations & Safety Boundaries
+
+### Voice Hot-Switching & Hardening
+- **Multiple Engines**: Support `'openwakeword'`, `'porcupine'`, and `'custom-energy'`. Hot-switching engines mid-session restarts the listener process cleanly.
+- **Auto-Fallback**: If a secondary engine crashes on startup (e.g. missing API key), the system automatically rolls back to `'openwakeword'` and restarts listening.
+- **Accuracy Benchmarking**: Developers can benchmark wake-word accuracy by running `jarvis voice benchmark` against audio fixtures under delta sensitivity parameters.
+
+### Periodic Visual Capture
+- **Gated Continuous Captures**: Continuous screenshot loops are gated under the `'vision-periodic-start'` permission action category. Once starting is approved, individual captures run pre-approved to avoid disruption.
+- **Tray Toolkit Presence**: Active periodic capture status is displayed as `[Periodic Snapshots Active]` in the system tray tooltip and health monitor.
+- **FIFO File Cleanup**: Screenshots are cleaned up automatically in a FIFO manner, capping folder storage size to a user-configured limit.
+- **Local-First Routing**: Image analysis defaults to local Ollama (llava) to safeguard user privacy, while cloud endpoints remain available as overrides.
+
+### Autonomous Web Research Egress
+- **Audited Queries**: Search requests use `SearchConnector` gated under the `'web-search'` action, logged, and rate-limited system-wide.
+- **Prompt-Injection GDI Guard**: All ingested external snippets are wrapped inside strict `<untrusted-web-content>` XML tags. System instructions warn the model to treat the content strictly as data, neutralizing attempts like "ignore previous instructions".
+- **Source Citations**: Output summaries preserve exact search citation mappings (URLs/titles).
+
 

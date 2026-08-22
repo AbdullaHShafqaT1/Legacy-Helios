@@ -7,6 +7,7 @@ export interface ModelRequestContext {
     base64: string;
     mediaType: string;
   };
+  provider?: 'ollama' | 'claude';
 }
 
 export interface ModelResponse {
@@ -41,6 +42,7 @@ export class ModelRouter {
 
   /**
    * Routes a request to the first registered route capable of handling the task type.
+   * Matches preferred provider if specified.
    *
    * @param taskType The type of LLM processing required.
    * @param context The request parameters.
@@ -48,7 +50,25 @@ export class ModelRouter {
    * @throws ModelRouterError if no capable route handler is registered.
    */
   async route(taskType: TaskType, context: ModelRequestContext): Promise<ModelResponse> {
-    const route = this.routes.find(r => r.taskTypes.includes(taskType));
+    let route: ModelRoute | undefined;
+
+    if (context.provider === 'ollama') {
+      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector');
+    } else if (context.provider === 'claude') {
+      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'ClaudeConnector');
+    }
+
+    if (!route) {
+      if (taskType === 'vision') {
+        // Prefer local Ollama/llava route for vision by default
+        route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector')
+             || this.routes.find(r => r.taskTypes.includes(taskType));
+      } else {
+        // Prefer cloud Claude route for coding/reasoning/research by default
+        route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'ClaudeConnector')
+             || this.routes.find(r => r.taskTypes.includes(taskType));
+      }
+    }
     
     if (!route) {
       throw new ModelRouterError(`No registered model route matches task type "${taskType}".`);

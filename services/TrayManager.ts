@@ -107,6 +107,16 @@ export class TrayManager {
     if (pending > 0) {
       tooltip += ` | ${pending} pending approval${pending === 1 ? '' : 's'}`;
     }
+    
+    // Check if periodic capture is running
+    try {
+      const report = this.options.healthMonitor.getReport();
+      const visionStatus = report.find(s => s.name === 'vision');
+      if (visionStatus?.details?.includes('periodic-capture: active')) {
+        tooltip += ' | [Periodic Snapshots Active]';
+      }
+    } catch { /* ignore */ }
+
     return tooltip;
   }
 

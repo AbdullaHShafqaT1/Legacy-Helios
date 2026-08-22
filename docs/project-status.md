@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1–11 Complete)
+# Jarvis OS Project Status (Phases 1–13 Complete)
 
-This living status document captures the completion state of **Jarvis Phases 1 through 11**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phases 1 through 13**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -64,11 +64,14 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **12.1** | Boot-on-Startup (opt-in): `ServiceInstaller.ts` with platform-specific implementations for Windows Task Scheduler (`LogonType=InteractiveToken` + `RunOnlyIfLoggedOn=true` mandatory guards), Linux systemd user unit, and macOS LaunchAgent. CLI commands `jarvis service install/uninstall/status`. | **COMPLETE** |
 | **12.2** | System Tray Icon: `TrayManager.ts` with graceful headless fallback, status polling from `HealthMonitor`, pending-approval count badge, and emergency stop routed exclusively through the existing `queue:emergency-stop` event bus event. | **COMPLETE** |
 | **12.3** | Multi-Project Workspace Management: `WorkspaceManager.ts` with named workspace registry (SQLite), per-workspace `FilesystemConnector`/`MemoryManager`/`KanbanConnector` scoping, active-workspace orchestrator state, mid-task switch semantics, and `--force` orphan handling. CLI commands `jarvis workspace create/list/switch/remove`. | **COMPLETE** |
+| **13.1** | Wake-Word Engine Hardening: Dynamic engine switching, Porcupine AccessKey gating, built-in custom energy detector, and accuracy CLI benchmark. | **COMPLETE** |
+| **13.2** | Dual Capture Modes: Periodic background capture loop, tray tooltip indicator, FIFO screenshot file retention, and emergency-stop hook. | **COMPLETE** |
+| **13.3** | Autonomous Web Research: Gated web-search queries, search rate limiter (audit log checks), prompt injection defense (XML wrapping/warning instructions), and citations preservation. | **COMPLETE** |
 
 ### Total Project Test Count:
-**267 tests** pass successfully across **40 test files** inside the repository.
+**281 tests** pass successfully across **44 test files** inside the repository.
 
-Phase 12 adds 3 new test files: `phase12-workspace.test.ts`, `phase12-service.test.ts`, `phase12-tray.test.ts`.
+Phase 13 adds 4 new test files: `phase13-voice.test.ts`, `phase13-vision.test.ts`, `phase13-search.test.ts`, `phase13-integration.test.ts`.
 
 ---
 
@@ -191,14 +194,14 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 - **A1 — Primary stack: Node.js + TypeScript for the orchestrator/agent runtime/UI; Python for AI/ML-heavy workers (vision, embeddings, local model serving)**: **Consistent**. The TypeScript/Node.js orchestrator runtime is fully integrated with Python speech processing scripts (openWakeWord, Whisper) and a local-first GDI screen capture script.
 - **A2 — OS target: cross-platform (Windows/macOS/Linux), developed/tested first on whichever OS you're on**: **Consistent**. Fully verified on Windows (using SAPI5 pyttsx3 engine) and tested across all platforms in CI matrices.
 - **A3 — Cloud model provider: Anthropic Claude API as primary, with a pluggable model-router so other providers (OpenAI, local Ollama) can be swapped in without redesign**: **Consistent**. Pluggable structure is enforced by `ModelRouter`.
-- **A4 — Local model runtime: Ollama for local LLM serving**: **Diverged (Deferred)**. Local LLM serving via Ollama remains deferred.
+- **A4 — Local model runtime: Ollama for local LLM serving**: **RESOLVED (Phase 13)**. Dynamic routing in `ModelRouter` leverages Ollama/llava by default for vision analysis.
 - **A5 — Interface for Phase 1/Phase 2: CLI + structured logs, NOT voice, NOT computer-control yet**: **Partially Consistent**. Computer control (browser/terminal/read-only vision) and voice capabilities are now fully implemented.
 - **A6 — Storage: SQLite for structured state + a local vector store (SQLite-VSS or Chroma) for memory**: **Consistent**. Relational Task Queue and Audit Log run in SQLite; Vector Store matches the specification.
 - **A7 — You are a developer comfortable running Node/Python locally and reading code**: **Consistent**. Build systems, environment download scripts, and tests conform to standard developer installations.
 
 ---
 
-## 📊 Self-Review Scorecard (Phases 1–9 Complete)
+## 📊 Self-Review Scorecard (Phases 1–13 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |

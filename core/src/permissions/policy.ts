@@ -14,6 +14,8 @@ export type GuardedAction =
   | 'browser-admin'
   | 'terminal-run'
   | 'vision-read'
+  | 'vision-periodic-start'
+  | 'web-search'
   | 'desktop-mouse'
   | 'desktop-keyboard'
   | 'desktop-admin';
@@ -38,7 +40,7 @@ export type PolicyMap = Record<string, AgentPolicy>;
  * Default role-based policies for Jarvis agents.
  *
  * DESIGN DECISION: Conservative Auto-Approval
- * Only passive, read-only operations ('file-read', 'memory-read', 'vision-read') are eligible for policy-level auto-approval.
+ * Only passive, read-only operations ('file-read', 'memory-read', 'vision-read', 'web-search') are eligible for policy-level auto-approval.
  * All mutating actions ('file-write', 'file-delete', 'git-operation', 'memory-write') and all high-friction/destructive
  * categories ('git-force-push', 'git-history-rewrite', 'destructive') MUST NEVER be auto-approved
  * by policy and must strictly require human-in-the-loop authorization.
@@ -56,6 +58,8 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
       'memory-write',
       'memory-read',
       'vision-read',
+      'vision-periodic-start',
+      'web-search',
       'desktop-mouse',
       'desktop-keyboard',
       'desktop-admin',
@@ -63,8 +67,8 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
     autoApproveActions: ['file-read', 'memory-read', 'vision-read'],
   },
   'researcher': {
-    allowedActions: ['file-read', 'memory-read', 'memory-write', 'vision-read'],
-    autoApproveActions: ['file-read', 'memory-read', 'vision-read'],
+    allowedActions: ['file-read', 'memory-read', 'memory-write', 'vision-read', 'vision-periodic-start', 'web-search'],
+    autoApproveActions: ['file-read', 'memory-read', 'vision-read', 'web-search'],
   },
   'code-reviewer': {
     allowedActions: ['file-read', 'memory-read', 'memory-write'],
@@ -75,11 +79,15 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
     autoApproveActions: ['memory-read', 'kanban-write'],
   },
   'browser-operator': {
-    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write', 'vision-read', 'desktop-mouse'],
+    allowedActions: ['browser-read', 'browser-write', 'memory-read', 'memory-write', 'vision-read', 'vision-periodic-start', 'web-search', 'desktop-mouse'],
     autoApproveActions: ['browser-read', 'memory-read', 'vision-read'],
   },
   'terminal-operator': {
-    allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read', 'desktop-mouse', 'desktop-keyboard'],
+    allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read', 'vision-periodic-start', 'web-search', 'desktop-mouse', 'desktop-keyboard'],
     autoApproveActions: ['memory-read', 'vision-read'],
+  },
+  'system': {
+    allowedActions: ['memory-write', 'memory-read', 'vision-read'],
+    autoApproveActions: ['memory-write', 'memory-read', 'vision-read'],
   },
 };
