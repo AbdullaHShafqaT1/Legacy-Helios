@@ -1,7 +1,7 @@
 openwakeword>=0.6.0
 onnxruntime>=1.15.0
 openai-whisper>=20231117
-pyttsx3>=2.90
+pyttsx3>=2.99
 sounddevice>=0.4.6
 scipy>=1.9.0
 websockets>=12.0
