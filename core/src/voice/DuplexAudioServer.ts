@@ -42,7 +42,7 @@ export class DuplexAudioServer {
     this.logger.info({ port }, 'Starting Duplex Audio WebSocket server');
 
     try {
-      this.wss = new WebSocketServer({ port });
+      this.wss = new WebSocketServer({ host: '127.0.0.1', port });
 
       this.wss.on('connection', (ws) => {
         this.logger.info('Duplex voice client connected.');
