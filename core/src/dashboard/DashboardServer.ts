@@ -28,6 +28,7 @@ export class DashboardServer {
   private wss: WebSocketServer | null = null;
   private wsClients = new Set<WebSocket>();
   private activeSockets = new Set<any>();
+  private pollInterval: NodeJS.Timeout | null = null;
 
   constructor(options: DashboardServerOptions) {
     this.config = options.config;
@@ -95,14 +96,17 @@ export class DashboardServer {
       });
 
       // Poll database for state changes periodically and broadcast
-      const pollInterval = setInterval(() => {
+      this.pollInterval = setInterval(() => {
         if (this.wsClients.size > 0) {
           this.broadcastState();
         }
       }, 2000);
 
       this.server.on('close', () => {
-        clearInterval(pollInterval);
+        if (this.pollInterval) {
+          clearInterval(this.pollInterval);
+          this.pollInterval = null;
+        }
       });
 
     } catch (err: any) {
@@ -115,6 +119,10 @@ export class DashboardServer {
    */
   stop(): void {
     this.logger.info('Stopping Dashboard server...');
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
     for (const ws of this.wsClients) {
       try {
         ws.close();
@@ -248,6 +256,25 @@ export class DashboardServer {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Denied: Voice-originated task actions must be approved via CLI/text override.' }));
           return;
+        }
+
+        // Server-side High-friction validation check
+        if (decision === 'granted') {
+          const pendingRow = this.db.prepare("SELECT request_payload_json FROM pending_approvals WHERE task_id = ? AND status = 'pending'").get(taskId) as { request_payload_json: string } | undefined;
+          if (pendingRow) {
+            try {
+              const payloadParsed = JSON.parse(pendingRow.request_payload_json);
+              const action = payloadParsed.action;
+              const isHighFriction = ['git-force-push', 'git-history-rewrite', 'destructive', 'terminal-run'].includes(action);
+              if (isHighFriction && !payload.confirmed) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Denied: High-friction actions require explicit user confirmation check.' }));
+                return;
+              }
+            } catch (jsonErr) {
+              this.logger.error({ jsonErr }, 'Failed to parse request_payload_json for high friction check');
+            }
+          }
         }
 
         const now = new Date().toISOString();

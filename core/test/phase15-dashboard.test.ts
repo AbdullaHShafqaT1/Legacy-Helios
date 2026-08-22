@@ -184,16 +184,15 @@ describe('Phase 15 Local Status Dashboard tests', () => {
     db.prepare("INSERT INTO tasks (id, source, status) VALUES (?, 'cli', 'pending')").run(taskId);
     
     const correlationId = 'corr-999';
-    const payload = { actor: 'coder', action: 'terminal-run', params: { command: 'npm run test' } };
+    const payload = { actor: 'coder', action: 'file-write', params: { path: 'test.ts', content: 'test' } };
     
     db.prepare(`
       INSERT INTO pending_approvals (id, correlation_id, task_id, request_payload_json, status, created_at, updated_at)
       VALUES ('ap-1', ?, ?, ?, 'pending', '2026-08-22T00:00:00Z', '2026-08-22T00:00:00Z')
     `).run(correlationId, taskId, JSON.stringify(payload));
 
-    // Call approve API
     const postData = JSON.stringify({ taskId });
-    const approvePromise = new Promise<number>((resolve, reject) => {
+    const approvePromise = new Promise<{ code: number, body: string }>((resolve, reject) => {
       const req = http.request({
         hostname: '127.0.0.1',
         port: port,
@@ -204,16 +203,17 @@ describe('Phase 15 Local Status Dashboard tests', () => {
           'Content-Length': Buffer.byteLength(postData)
         }
       }, (res) => {
-        res.resume();
-        resolve(res.statusCode || 0);
+        let body = '';
+        res.on('data', chunk => body += chunk.toString());
+        res.on('end', () => resolve({ code: res.statusCode || 0, body }));
       });
       req.on('error', reject);
       req.write(postData);
       req.end();
     });
 
-    const statusCode = await approvePromise;
-    expect(statusCode).toBe(200);
+    const result = await approvePromise;
+    expect(result.code).toBe(200);
 
     // Verify database row updated to granted
     const row = db.prepare('SELECT status FROM pending_approvals WHERE task_id = ?').get(taskId) as { status: string };
@@ -262,5 +262,87 @@ describe('Phase 15 Local Status Dashboard tests', () => {
     // Verify database row remains pending (gated!)
     const row = db.prepare('SELECT status FROM pending_approvals WHERE task_id = ?').get(taskId) as { status: string };
     expect(row.status).toBe('pending');
+  });
+
+  it('rejects a high-friction pending task if confirmed is not passed', async () => {
+    const taskId = 'task-hf-1';
+    db.prepare("INSERT INTO tasks (id, source, status) VALUES (?, 'cli', 'pending')").run(taskId);
+
+    const correlationId = 'corr-hf-1';
+    const payload = { actor: 'coder', action: 'terminal-run', params: { command: 'rm -rf /' } };
+
+    db.prepare(`
+      INSERT INTO pending_approvals (id, correlation_id, task_id, request_payload_json, status, created_at, updated_at)
+      VALUES ('ap-hf-1', ?, ?, ?, 'pending', '2026-08-22T00:00:00Z', '2026-08-22T00:00:00Z')
+    `).run(correlationId, taskId, JSON.stringify(payload));
+
+    const postData = JSON.stringify({ taskId });
+    const approvePromise = new Promise<{ code: number, body: string }>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: port,
+        path: '/api/approve',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk.toString());
+        res.on('end', () => resolve({ code: res.statusCode || 0, body }));
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    const result = await approvePromise;
+    expect(result.code).toBe(400);
+    expect(JSON.parse(result.body).error).toContain('High-friction actions require explicit user confirmation check');
+
+    const row = db.prepare('SELECT status FROM pending_approvals WHERE task_id = ?').get(taskId) as { status: string };
+    expect(row.status).toBe('pending');
+  });
+
+  it('approves a high-friction pending task if confirmed is passed as true', async () => {
+    const taskId = 'task-hf-2';
+    db.prepare("INSERT INTO tasks (id, source, status) VALUES (?, 'cli', 'pending')").run(taskId);
+
+    const correlationId = 'corr-hf-2';
+    const payload = { actor: 'coder', action: 'terminal-run', params: { command: 'rm -rf /' } };
+
+    db.prepare(`
+      INSERT INTO pending_approvals (id, correlation_id, task_id, request_payload_json, status, created_at, updated_at)
+      VALUES ('ap-hf-2', ?, ?, ?, 'pending', '2026-08-22T00:00:00Z', '2026-08-22T00:00:00Z')
+    `).run(correlationId, taskId, JSON.stringify(payload));
+
+    const postData = JSON.stringify({ taskId, confirmed: true });
+    const approvePromise = new Promise<{ code: number, body: string }>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: port,
+        path: '/api/approve',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk.toString());
+        res.on('end', () => resolve({ code: res.statusCode || 0, body }));
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    const result = await approvePromise;
+    expect(result.code).toBe(200);
+    expect(JSON.parse(result.body).success).toBe(true);
+
+    const row = db.prepare('SELECT status FROM pending_approvals WHERE task_id = ?').get(taskId) as { status: string };
+    expect(row.status).toBe('granted');
   });
 });
