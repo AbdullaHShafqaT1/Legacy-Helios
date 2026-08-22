@@ -51,6 +51,35 @@ describe('Phase 13 End-to-End Integration Suite', () => {
       screenshotPath: path.resolve(context.config.projectRoot, 'core/test/fixtures/desktop_screenshot.png'),
       imageFixtureFallbackUsed: true,
     });
+
+    // Mock global fetch for offline search capability in integration test
+    vi.spyOn(global, 'fetch').mockImplementation(async (url: any) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('duckduckgo.com')) {
+        const fakeHtml = `
+          <div class="result results_links results_links_deep web-result ">
+            <div class="links_main links_deep result__body">
+              <h2 class="result__title">
+                <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fnews%2Fautonomous%2520ai%2520research&amp;rut=123">Simulated research summary</a>
+              </h2>
+              <div class="result__extras"></div>
+              <a class="result__snippet" href="...">Simulated research summary text with api-key sk-ant-9876543210zyx</a>
+              <div class="clear"></div>
+            </div>
+          </div>
+        `;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => fakeHtml,
+        } as any;
+      }
+      return {
+        ok: false,
+        status: 404,
+        text: async () => 'Not Found',
+      } as any;
+    });
   });
 
   afterEach(async () => {

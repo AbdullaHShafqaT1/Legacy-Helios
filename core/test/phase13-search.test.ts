@@ -52,13 +52,42 @@ describe('Phase 13 Search Connector & Researcher Egress', () => {
     gatekeeper = new PermissionGatekeeper(auditLog, logger, async () => true);
 
     searchConnector = new SearchConnector({
-      provider: 'duckduckgo', // Mock fallback
+      provider: 'duckduckgo',
       gatekeeper,
       auditLog,
       db,
       logger,
       rateLimitCount: 2, // Low limit for testing rate limits
       rateLimitWindowMs: 1000,
+    });
+
+    // Mock global fetch to return standard DDG HTML layout offline
+    vi.spyOn(global, 'fetch').mockImplementation(async (url: any) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('duckduckgo.com')) {
+        const fakeHtml = `
+          <div class="result results_links results_links_deep web-result ">
+            <div class="links_main links_deep result__body">
+              <h2 class="result__title">
+                <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FTypeScript&amp;rut=123">TypeScript - Wikipedia</a>
+              </h2>
+              <div class="result__extras"></div>
+              <a class="result__snippet" href="...">TypeScript is a programming language. Credentials key: sk-ant-12345fakekey</a>
+              <div class="clear"></div>
+            </div>
+          </div>
+        `;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => fakeHtml,
+        } as any;
+      }
+      return {
+        ok: false,
+        status: 404,
+        text: async () => 'Not Found',
+      } as any;
     });
   });
 

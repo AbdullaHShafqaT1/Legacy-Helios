@@ -20,6 +20,7 @@ import { ClaudeConnector } from '../../connectors/claude-api/ClaudeConnector.js'
 import { PeriodicCaptureManager } from '../../services/PeriodicCaptureManager.js';
 import { SearchConnector } from '../../connectors/search/SearchConnector.js';
 import { KanbanConnector } from '../../connectors/kanban/KanbanConnector.js';
+import { DuplexAudioServer } from './voice/DuplexAudioServer.js';
 import { MessageRouter } from './router/messageRouter.js';
 import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
 import { CodeReviewerAgent } from '../../agents/code-reviewer/CodeReviewerAgent.js';
@@ -56,6 +57,7 @@ export interface JarvisContext extends CliContext {
   computerVisionConnector: ComputerVisionConnector;
   periodicCaptureManager: PeriodicCaptureManager;
   searchConnector: SearchConnector;
+  duplexAudioServer: DuplexAudioServer;
   desktopConnector: DesktopConnector;
   overrideHookConnector: OverrideHookConnector;
   healthMonitor: HealthMonitor;
@@ -249,6 +251,18 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     logger: createLogger('desktop-connector', config.logLevel),
   });
 
+  const duplexAudioServer = new DuplexAudioServer({
+    config,
+    logger: createLogger('duplex-audio-server', config.logLevel),
+    modelRouter,
+    healthMonitor,
+  });
+
+  // Only start the duplex voice server in production, not in Vitest test runs to avoid port collision
+  if (!process.env.VITEST) {
+    duplexAudioServer.start();
+  }
+
   healthMonitor.transition('browser', 'HEALTHY');
   healthMonitor.transition('terminal', 'HEALTHY');
   healthMonitor.transition('vision', 'HEALTHY');
@@ -414,6 +428,13 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       logger.error({ err }, 'Failed to stop periodic capture manager during shutdown.');
     }
 
+    // Terminate duplex WebSocket audio server
+    try {
+      duplexAudioServer.stop();
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to stop duplex audio server during shutdown.');
+    }
+
     // Terminate desktop sessions
     healthMonitor.transition('desktop', 'STOPPING');
     try {
@@ -474,6 +495,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     computerVisionConnector,
     periodicCaptureManager,
     searchConnector,
+    duplexAudioServer,
     desktopConnector,
     overrideHookConnector,
     healthMonitor,

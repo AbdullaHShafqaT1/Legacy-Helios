@@ -125,22 +125,50 @@ export class SearchConnector {
         }));
 
       } else {
-        // DuckDuckGo fallback / Mock mode
-        this.logger.info({ query }, 'Executing DuckDuckGo fallback (mocked) search');
-        
-        // Return realistic search outputs
-        results = [
-          {
-            title: `Search results for "${query}" - Wikipedia`,
-            url: `https://en.wikipedia.org/wiki/${encodeURIComponent(query)}`,
-            content: `This is a web search result snippet describing information about ${query}. This page contains basic details and credentials context for testing.`,
+        this.logger.info({ query }, 'Executing DuckDuckGo HTML search');
+        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const res = await fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },
-          {
-            title: `Latest updates on ${query}`,
-            url: `https://example.com/news/${encodeURIComponent(query)}`,
-            content: `Breaking news and structural updates related to ${query}. Access key sk-ant-12345fakekey should be redacted here.`,
+        });
+
+        if (!res.ok) {
+          throw new Error(`DuckDuckGo search failed with status ${res.status}`);
+        }
+
+        const html = await res.text();
+        const resultRegex = /<div class="[^"]*web-result[^"]*">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g;
+        let match;
+
+        while ((match = resultRegex.exec(html)) !== null) {
+          const block = match[1];
+          const titleMatch = block.match(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+          const snippetMatch = block.match(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/);
+
+          if (titleMatch) {
+            const rawUrl = titleMatch[1];
+            const title = titleMatch[2].replace(/<[^>]*>/g, '').trim();
+            const content = snippetMatch ? snippetMatch[1].replace(/<[^>]*>/g, '').trim() : '';
+
+            let cleanUrl = rawUrl;
+            try {
+              const urlObj = new URL(rawUrl.startsWith('//') ? 'https:' + rawUrl : rawUrl);
+              const uddg = urlObj.searchParams.get('uddg');
+              if (uddg) {
+                cleanUrl = uddg;
+              }
+            } catch {
+              // fallback
+            }
+
+            results.push({
+              title,
+              url: cleanUrl,
+              content,
+            });
           }
-        ];
+        }
       }
 
       // Redact sensitive secrets from the ingested content
