@@ -182,7 +182,7 @@ export class KanbanConnector {
     }
   }
 
-  getCards(boardId = 'default-board'): KanbanCard[] {
+  getCards(boardId = this.defaultBoardId): KanbanCard[] {
     const stmt = this.db.prepare(`
       SELECT c.*
       FROM kanban_cards c
@@ -218,7 +218,7 @@ export class KanbanConnector {
     };
   }
 
-  getBoardStatus(boardId = 'default-board'): string {
+  getBoardStatus(boardId = this.defaultBoardId): string {
     const board = this.db.prepare('SELECT name FROM kanban_boards WHERE id = ?').get(boardId) as { name: string } | undefined;
     if (!board) return 'No board found.';
 

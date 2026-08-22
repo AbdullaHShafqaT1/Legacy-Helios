@@ -168,13 +168,21 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       })
     : filesystemConnector;
 
+  const boardId = activeWorkspace
+    ? `board-${activeWorkspace.id.slice(0, 8)}`
+    : (config.kanbanDefaultBoardId ?? 'default-board');
+  const boardName = activeWorkspace
+    ? `Board for ${activeWorkspace.name}`
+    : (config.kanbanDefaultBoardName ?? 'Default Board');
+
   const kanbanConnector = new KanbanConnector(
     db,
     gatekeeper,
     auditLog,
     createLogger('kanban-connector', config.logLevel),
-    config.kanbanDefaultBoardId ?? 'default-board',
-    config.kanbanDefaultBoardName ?? 'Default Board'
+    boardId,
+    boardName,
+    activeWorkspace ? activeWorkspace.id : null
   );
 
   const browserConnector = new BrowserConnector({
