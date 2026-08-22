@@ -45,6 +45,14 @@ export interface VectorStore {
   close(): void;
 }
 
+export interface KdNode {
+  id: string;
+  embedding: number[];
+  left: KdNode | null;
+  right: KdNode | null;
+  splitDim: number;
+}
+
 /**
  * Local-first SQLite-backed Vector Store implementation using better-sqlite3.
  * Stores embeddings as serialized JSON float arrays and computes exact cosine similarity.
@@ -68,6 +76,7 @@ export class SqliteVectorStore implements VectorStore {
   private dbPath: string;
   private db: Database.Database | null = null;
   private logger?: Logger;
+  private kdRoot: KdNode | null = null;
 
   constructor(dbPath: string, logger?: Logger) {
     this.dbPath = dbPath;
@@ -114,6 +123,9 @@ export class SqliteVectorStore implements VectorStore {
       // Validate database accessibility
       const checkStmt = this.db.prepare('SELECT count(*) as cnt FROM embeddings');
       checkStmt.get();
+
+      // Build KD-Tree index on initialization
+      this.rebuildIndex();
     } catch (error: any) {
       if (this.db) {
         try {
@@ -154,6 +166,16 @@ export class SqliteVectorStore implements VectorStore {
       `);
 
       insertStmt.run(id, JSON.stringify(embedding), embedding.length, now);
+
+      // Incrementally update KD-Tree index
+      try {
+        this.kdRoot = this.insertKdNode(this.kdRoot, id, embedding, 0);
+      } catch (err: any) {
+        if (this.logger) {
+          this.logger.warn({ err: err.message }, 'Failed to insert node to KD-Tree incrementally. Rebuilding tree.');
+        }
+        this.rebuildIndex();
+      }
     } catch (error: any) {
       const msg = `Failed to store embedding "${id}" in vector store: ${error?.message || String(error)}`;
       if (this.logger) {
@@ -181,27 +203,32 @@ export class SqliteVectorStore implements VectorStore {
       throw new VectorStoreError('topK must be a positive integer.');
     }
 
-    try {
-      const dimensions = queryEmbedding.length;
-      const selectStmt = this.db.prepare('SELECT id, embedding FROM embeddings WHERE dimensions = ?');
-      const rows = selectStmt.all(dimensions) as { id: string; embedding: string }[];
+    // Try querying the KD-Tree index first
+    if (this.kdRoot) {
+      try {
+        const results: { id: string; score: number }[] = [];
 
-      const results: VectorQueryResult[] = [];
-      for (const row of rows) {
-        const storedEmbedding = JSON.parse(row.embedding) as number[];
-        const score = this.cosineSimilarity(queryEmbedding, storedEmbedding);
-        results.push({ id: row.id, score });
-      }
+        // Normalize query embedding for accurate metric distance pruning comparisons
+        let normSq = 0;
+        for (let i = 0; i < queryEmbedding.length; i++) {
+          normSq += queryEmbedding[i] * queryEmbedding[i];
+        }
+        const queryNorm = normSq > 0 ? Math.sqrt(normSq) : 1;
+        const normalizedQuery = queryEmbedding.map(v => v / queryNorm);
 
-      results.sort((a, b) => b.score - a.score);
-      return results.slice(0, topK);
-    } catch (error: any) {
-      const msg = `Failed to query vector store: ${error?.message || String(error)}`;
-      if (this.logger) {
-        this.logger.error({ err: error }, msg);
+        this.searchKdTree(this.kdRoot, queryEmbedding, normalizedQuery, topK, results);
+
+        results.sort((a, b) => b.score - a.score);
+        return results.slice(0, topK);
+      } catch (err: any) {
+        if (this.logger) {
+          this.logger.warn({ err: err.message }, 'KD-Tree query failed. Falling back to linear scan.');
+        }
       }
-      throw new VectorStoreError(msg);
     }
+
+    // Fallback to linear scan query
+    return this.linearScanQuery(queryEmbedding, topK);
   }
 
   /**
@@ -240,7 +267,13 @@ export class SqliteVectorStore implements VectorStore {
     try {
       const deleteStmt = this.db.prepare('DELETE FROM embeddings WHERE id = ?');
       const info = deleteStmt.run(id);
-      return info.changes > 0;
+      
+      if (info.changes > 0) {
+        // Rebuild index on deletion to rebalance tree and purge tombstone reference IDs
+        this.rebuildIndex();
+        return true;
+      }
+      return false;
     } catch (error: any) {
       const msg = `Failed to delete embedding "${id}": ${error?.message || String(error)}`;
       throw new VectorStoreError(msg);
@@ -290,5 +323,184 @@ export class SqliteVectorStore implements VectorStore {
       return 0;
     }
     return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  /**
+   * Performs brute-force linear-scan matching over database rows (fallback query route).
+   */
+  private linearScanQuery(queryEmbedding: number[], topK: number): VectorQueryResult[] {
+    try {
+      const dimensions = queryEmbedding.length;
+      const selectStmt = this.db!.prepare('SELECT id, embedding FROM embeddings WHERE dimensions = ?');
+      const rows = selectStmt.all(dimensions) as { id: string; embedding: string }[];
+
+      const results: VectorQueryResult[] = [];
+      for (const row of rows) {
+        const storedEmbedding = JSON.parse(row.embedding) as number[];
+        const score = this.cosineSimilarity(queryEmbedding, storedEmbedding);
+        results.push({ id: row.id, score });
+      }
+
+      results.sort((a, b) => b.score - a.score);
+      return results.slice(0, topK);
+    } catch (err: any) {
+      throw new VectorStoreError(`Linear scan query failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Rebuilds the KD-Tree index from scratch.
+   */
+  private rebuildIndex(): void {
+    if (!this.db) return;
+    try {
+      const selectStmt = this.db.prepare('SELECT id, embedding FROM embeddings');
+      const rows = selectStmt.all() as { id: string; embedding: string }[];
+
+      const records = rows.map(r => ({
+        id: r.id,
+        embedding: JSON.parse(r.embedding) as number[]
+      }));
+
+      if (records.length === 0) {
+        this.kdRoot = null;
+        return;
+      }
+
+      this.kdRoot = this.buildKdTree(records, 0);
+      if (this.logger) {
+        this.logger.info({ count: records.length }, 'KD-Tree index rebuilt successfully.');
+      }
+    } catch (err: any) {
+      if (this.logger) {
+        this.logger.warn({ err: err.message }, 'Failed to rebuild KD-Tree index. Falling back to linear scan.');
+      }
+      this.kdRoot = null;
+    }
+  }
+
+  private buildKdTree(records: { id: string; embedding: number[] }[], depth: number): KdNode | null {
+    if (records.length === 0) return null;
+
+    const dimensions = records[0].embedding.length;
+    const dim = depth % dimensions;
+
+    records.sort((a, b) => a.embedding[dim] - b.embedding[dim]);
+    const medianIdx = Math.floor(records.length / 2);
+    const medianRecord = records[medianIdx];
+
+    return {
+      id: medianRecord.id,
+      embedding: medianRecord.embedding,
+      splitDim: dim,
+      left: this.buildKdTree(records.slice(0, medianIdx), depth + 1),
+      right: this.buildKdTree(records.slice(medianIdx + 1), depth + 1)
+    };
+  }
+
+  private insertKdNode(root: KdNode | null, id: string, embedding: number[], depth: number): KdNode {
+    if (root === null) {
+      return {
+        id,
+        embedding,
+        splitDim: depth % embedding.length,
+        left: null,
+        right: null
+      };
+    }
+
+    if (root.id === id) {
+      root.embedding = embedding;
+      return root;
+    }
+
+    const dim = root.splitDim;
+    if (embedding[dim] < root.embedding[dim]) {
+      root.left = this.insertKdNode(root.left, id, embedding, depth + 1);
+    } else {
+      root.right = this.insertKdNode(root.right, id, embedding, depth + 1);
+    }
+    return root;
+  }
+
+  private searchKdTree(
+    node: KdNode | null,
+    queryVec: number[],
+    normalizedQuery: number[],
+    topK: number,
+    bestResults: { id: string; score: number }[]
+  ): void {
+    if (node === null) return;
+
+    if (node.embedding.length !== queryVec.length) {
+      throw new Error(`Dimension mismatch: query dimension ${queryVec.length} does not match node dimension ${node.embedding.length}`);
+    }
+
+    const score = this.cosineSimilarity(queryVec, node.embedding);
+    this.addQueryResult(bestResults, { id: node.id, score }, topK);
+
+    const dim = node.splitDim;
+    const splitVal = node.embedding[dim];
+    const queryVal = queryVec[dim];
+
+    let nextNode: KdNode | null = null;
+    let otherNode: KdNode | null = null;
+
+    if (queryVal < splitVal) {
+      nextNode = node.left;
+      otherNode = node.right;
+    } else {
+      nextNode = node.right;
+      otherNode = node.left;
+    }
+
+    this.searchKdTree(nextNode, queryVec, normalizedQuery, topK, bestResults);
+
+    // Prune standard other subtrees using Euclidean projection of unit vectors
+    let nodeNormSq = 0;
+    for (let i = 0; i < node.embedding.length; i++) {
+      nodeNormSq += node.embedding[i] * node.embedding[i];
+    }
+    const nodeNorm = nodeNormSq > 0 ? Math.sqrt(nodeNormSq) : 1;
+    const normalizedSplitVal = splitVal / nodeNorm;
+    const normalizedQueryVal = normalizedQuery[dim];
+
+    const distToHyperplaneSq = (normalizedQueryVal - normalizedSplitVal) * (normalizedQueryVal - normalizedSplitVal);
+
+    let shouldSearchOther = true;
+    if (bestResults.length === topK) {
+      const worstScore = bestResults[bestResults.length - 1].score;
+      const worstDistSq = 2 * (1 - worstScore);
+      if (distToHyperplaneSq >= worstDistSq) {
+        shouldSearchOther = false;
+      }
+    }
+
+    if (shouldSearchOther) {
+      this.searchKdTree(otherNode, queryVec, normalizedQuery, topK, bestResults);
+    }
+  }
+
+  private addQueryResult(list: { id: string; score: number }[], item: { id: string; score: number }, topK: number): void {
+    const existing = list.findIndex(r => r.id === item.id);
+    if (existing !== -1) {
+      if (item.score > list[existing].score) {
+        list[existing].score = item.score;
+        list.sort((a, b) => b.score - a.score);
+      }
+      return;
+    }
+
+    let insertIdx = 0;
+    while (insertIdx < list.length && list[insertIdx].score >= item.score) {
+      insertIdx++;
+    }
+
+    if (insertIdx < topK) {
+      list.splice(insertIdx, 0, item);
+      if (list.length > topK) {
+        list.pop();
+      }
+    }
   }
 }

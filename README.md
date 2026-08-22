@@ -80,6 +80,8 @@
   - **`JARVIS_TAVILY_API_KEY`**: Developer API key required if using `'tavily'` search provider.
   - **`JARVIS_SEARCH_RATE_LIMIT_COUNT`**: Maximum queries allowed in the rate limit window (default: `10`).
   - **`JARVIS_SEARCH_RATE_LIMIT_WINDOW_MS`**: Time window in milliseconds for enforcing search rate limits (default: `60000`).
+  - **`JARVIS_DASHBOARD_PORT`**: Port number for serving the local status web dashboard page and WebSocket stream (default: `8086`).
+  - **`JARVIS_REDACTION_ENTROPY_THRESHOLD`**: Floating-point threshold for character-level Shannon entropy token masking pass (default: `3.7`).
 
 ---
 

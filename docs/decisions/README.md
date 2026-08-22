@@ -17,5 +17,8 @@ This directory documents the technical decisions, design trade-offs, and archite
 | 0002 | SQLite JSON Cosine Vector Store | Accepted | 2026-08-03 | Selected custom SQLite-backed vector store with JSON float arrays and brute-force cosine similarity. |
 | 0003 | Autonomous Web Research and Safety | Accepted | 2026-08-22 | Implemented Tavily + real DuckDuckGo scraping, secrets redaction, and XML prompt-injection defense. |
 | 0004 | Continuous Duplex Audio Server | Accepted | 2026-08-22 | Built localhost-bound WebSocket audio server, VAD barge-in, and python client sounddevice interface. |
+| 0005 | In-Process Vector Indexing (KD-Tree) | Accepted | 2026-08-22 | Implemented in-process balanced KD-Tree index, L2 unit distance pruning, and database query fallbacks. |
+| 0006 | Entropy-Based Secrets Redaction | Accepted | 2026-08-22 | Implemented secondary Shannon-entropy token analysis pass in redactSecrets to catch unlabeled credentials. |
+| 0007 | Local Status Dashboard | Accepted | 2026-08-22 | Built localhost-bound Status Dashboard server with live screenshot feed and gated approval controls. |
 
 *To create a new decision record, copy the standard template `0000-template.md` and increment the ID.*

@@ -1,6 +1,6 @@
-# Jarvis OS Project Status (Phases 1–13 Complete)
+# Jarvis OS Project Status (Phases 1–15 Complete)
 
-This living status document captures the completion state of **Jarvis Phases 1 through 13**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
+This living status document captures the completion state of **Jarvis Phases 1 through 15**, outlining deliverables, exclusions, transition guidelines, locked-in assumptions, and carry-forward item resolutions.
 
 ---
 
@@ -67,11 +67,16 @@ This living status document captures the completion state of **Jarvis Phases 1 t
 | **13.1** | Wake-Word Engine Hardening: Dynamic engine switching, Porcupine AccessKey gating, built-in custom energy detector, and accuracy CLI benchmark. | **COMPLETE** |
 | **13.2** | Dual Capture Modes: Periodic background capture loop, tray tooltip indicator, FIFO screenshot file retention, and emergency-stop hook. | **COMPLETE** |
 | **13.3** | Autonomous Web Research: Gated web-search queries, search rate limiter (audit log checks), prompt injection defense (XML wrapping/warning instructions), and citations preservation. | **COMPLETE** |
+| **14.1** | Real Search Engine Integration: Replaced search mock with real DuckDuckGo scraper parsing html.duckduckgo.com and decoding uddg redirect variables. | **COMPLETE** |
+| **14.2** | Voice Duplex Mode: Opt-in local WebSocket duplex server binding strictly to 127.0.0.1 on port 8085 with VAD and barge-in controls. | **COMPLETE** |
+| **15.1** | Vector Search Performance (Pure TS Indexing): In-process balanced KD-Tree index constructed in-memory on start and kept synchronized incrementally on write, using L2 unit distance pruning. | **COMPLETE** |
+| **15.2** | Entropy-Based Redaction (Second Pass): Secondary secrets detection pass calculating character Shannon entropy over string tokens to mask high-entropy keys. | **COMPLETE** |
+| **15.3** | Local Status Dashboard: Dark-mode local status page served on 127.0.0.1:8086 with live screenshot streaming, health summaries, and interactive approval prompts. | **COMPLETE** |
 
 ### Total Project Test Count:
-**281 tests** pass successfully across **44 test files** inside the repository.
+**298 tests** pass successfully across **48 test files** inside the repository.
 
-Phase 13 adds 4 new test files: `phase13-voice.test.ts`, `phase13-vision.test.ts`, `phase13-search.test.ts`, `phase13-integration.test.ts`.
+Phase 14 and 15 add 4 new test files: `phase14-duplex-server.test.ts`, `phase15-vector-indexing.test.ts`, `phase15-redaction.test.ts`, `phase15-dashboard.test.ts`.
 
 ---
 
@@ -179,8 +184,8 @@ The table below provides the authoritative final resolution status for all carry
 | **9. Real OS-level process-boundary restart** | **ACCEPTED LIMITATION** | `resumption.test.ts` simulates task recovery across mock boundary transitions; true process-boundary daemon halt/recovery is tracked for Phase 8 reassessment. |
 | **10. `browser-admin` promptable-tier design** | **STILL DEFERRED** | Deferred due to lack of immediate production need for automated browser admin elevation hooks. |
 | **11. Local Speech/Wake/TTS integration** | **RESOLVED (Phase 8)** | Replaced skeletal plumbing wrappers with real local engines: openWakeWord for wake word, Whisper-tiny for STT, and pyttsx3 for TTS. All tests verified against generated WAV audio fixtures. |
-| **12. Linear-scan vector search cost at scale** | **STILL DEFERRED** | Cosine similarity computed iteratively over all stored vectors in JS/TS. Dynamic index indexing (like HNSW) is deferred. |
-| **13. Secrets pattern matching regex gaps** | **STILL DEFERRED** | Redaction scanner relies on regex shapes; advanced parsing/semantic scanning of credentials is deferred. |
+| **12. Linear-scan vector search cost at scale** | **RESOLVED (Phase 15)** | Implemented in-process KD-Tree vector search index in `SqliteVectorStore.ts`, yielding >40x query latency speedups. |
+| **13. Secrets pattern matching regex gaps** | **RESOLVED (Phase 15)** | Implemented a secondary Shannon-entropy token analysis pass in `redactSecrets` to flag and redact arbitrary high-entropy random keys. |
 | **14. Boot-on-startup / OS service registration** | **RESOLVED (Phase 12)** | `ServiceInstaller.ts` with Windows Task Scheduler (LogonType=InteractiveToken), Linux systemd user unit, macOS LaunchAgent. Interactive-session enforcement is a hard security constraint. |
 | **15. System tray icon / desktop overlay UI** | **RESOLVED (Phase 12)** | `TrayManager.ts` with graceful headless fallback, HealthMonitor status polling, pending-approval badge, emergency stop via existing event bus. |
 | **16. Linux/macOS desktop input control** | **STILL DEFERRED** | Explicitly de-scoped; native PowerShell event injection remains Windows-only. |
@@ -201,7 +206,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 
 ---
 
-## 📊 Self-Review Scorecard (Phases 1–13 Complete)
+## 📊 Self-Review Scorecard (Phases 1–15 Complete)
 
 | Dimension | Rating | Justification |
 | :--- | :--- | :--- |

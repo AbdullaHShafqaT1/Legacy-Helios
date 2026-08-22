@@ -21,6 +21,7 @@ import { PeriodicCaptureManager } from '../../services/PeriodicCaptureManager.js
 import { SearchConnector } from '../../connectors/search/SearchConnector.js';
 import { KanbanConnector } from '../../connectors/kanban/KanbanConnector.js';
 import { DuplexAudioServer } from './voice/DuplexAudioServer.js';
+import { DashboardServer } from './dashboard/DashboardServer.js';
 import { MessageRouter } from './router/messageRouter.js';
 import { ResearcherAgent } from '../../agents/researcher/ResearcherAgent.js';
 import { CodeReviewerAgent } from '../../agents/code-reviewer/CodeReviewerAgent.js';
@@ -58,6 +59,7 @@ export interface JarvisContext extends CliContext {
   periodicCaptureManager: PeriodicCaptureManager;
   searchConnector: SearchConnector;
   duplexAudioServer: DuplexAudioServer;
+  dashboardServer: DashboardServer;
   desktopConnector: DesktopConnector;
   overrideHookConnector: OverrideHookConnector;
   healthMonitor: HealthMonitor;
@@ -258,9 +260,18 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     healthMonitor,
   });
 
+  const dashboardServer = new DashboardServer({
+    config,
+    logger: createLogger('dashboard-server', config.logLevel),
+    db,
+    healthMonitor,
+    periodicCaptureManager,
+  });
+
   // Only start the duplex voice server in production, not in Vitest test runs to avoid port collision
   if (!process.env.VITEST) {
     duplexAudioServer.start();
+    dashboardServer.start();
   }
 
   healthMonitor.transition('browser', 'HEALTHY');
@@ -435,6 +446,13 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       logger.error({ err }, 'Failed to stop duplex audio server during shutdown.');
     }
 
+    // Terminate local status dashboard server
+    try {
+      dashboardServer.stop();
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to stop dashboard server during shutdown.');
+    }
+
     // Terminate desktop sessions
     healthMonitor.transition('desktop', 'STOPPING');
     try {
@@ -496,6 +514,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     periodicCaptureManager,
     searchConnector,
     duplexAudioServer,
+    dashboardServer,
     desktopConnector,
     overrideHookConnector,
     healthMonitor,
