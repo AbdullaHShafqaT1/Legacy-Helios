@@ -364,6 +364,25 @@ describe('WorkspaceManager — Kanban board workspace scoping', () => {
     // Workspace B board has no cards
     expect(cardsB).toHaveLength(0);
   });
+
+  it('getCards() and getBoardStatus() default to defaultBoardId dynamically', async () => {
+    await kanbanA.createCard('project-manager', {
+      id: 'card-a-default-test',
+      columnId: 'todo',
+      title: 'Task for defaultBoardId test',
+      status: 'open',
+    });
+
+    // Query getCards without arguments on kanbanA (configured for board-a)
+    const cards = kanbanA.getCards();
+    expect(cards).toHaveLength(1);
+    expect(cards[0].id).toBe('card-a-default-test');
+
+    // Query getBoardStatus without arguments on kanbanA
+    const statusReport = kanbanA.getBoardStatus();
+    expect(statusReport).toContain('Workspace A Board');
+    expect(statusReport).toContain('Task for defaultBoardId test');
+  });
 });
 
 

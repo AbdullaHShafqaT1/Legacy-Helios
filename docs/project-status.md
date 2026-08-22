@@ -212,6 +212,7 @@ For each of the 7 assumptions (A1–A7) from the master charter, here is their a
 | **Naming** | **PASS** | Adheres strictly to project standards (camelCase variables, snake_case DB columns, lowercase python files). |
 | **Documentation** | **PASS** | Updated Sub-task Completion Index, carry-forward status ledger, self-review scorecard, and limitations. |
 | **Testing** | **PARTIAL** | Core C# struct parsing, bitwise injected flags checking, voice turn-taking timers, and coordinate safety limits are fully verified. However, registration of global unmanaged hooks via `SetWindowsHookEx` is not verified E2E using real physical user hardware inputs. |
+| **Error Handling** | **PASS** | Idempotent cleanup during autostart installation failures and fail-closed security checks. |
 | **Edge Cases** | **PASS** | Handled COM deadlock issues in SAPI5 on Windows, bypassed ffmpeg dependency, and gated display-fallback routines cleanly. |
 | **Best Practices** | **PASS** | Safe resource cleanup (deleting COM references, killing child processes, cleaning temp files, and idempotent DB closure). |
 | **Future Compatibility** | **PASS** | Standard AudioEngine and Vision interfaces remain fully compatible with potential cloud/alternate local engines or desktop agent execution models. |
