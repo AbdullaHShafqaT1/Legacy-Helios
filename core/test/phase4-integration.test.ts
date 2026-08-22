@@ -493,7 +493,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       await new Promise(r => setTimeout(r, 50)); // yield for event loops
       const card = kanbanConnector.getCardByTaskId('task-flow-1');
       expect(card).toBeDefined();
-      expect(card?.columnId).toBe('todo');
+      expect(card?.columnId).toBe('default-board-todo');
 
       // 2. Claim and process task
       const claimed = queue.claimNext(agentRouter);
@@ -505,7 +505,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // PM handles task:started and moves card to in-progress
       await new Promise(r => setTimeout(r, 50));
       const cardStarted = kanbanConnector.getCardByTaskId('task-flow-1');
-      expect(cardStarted?.columnId).toBe('in-progress');
+      expect(cardStarted?.columnId).toBe('default-board-in-progress');
 
       // Process Software Engineer (which writes code.js and triggers code review request)
       const res = await softwareEngineer.process({
@@ -522,7 +522,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // PM moves card to done
       await new Promise(r => setTimeout(r, 100));
       const cardDone = kanbanConnector.getCardByTaskId('task-flow-1');
-      expect(cardDone?.columnId).toBe('done');
+      expect(cardDone?.columnId).toBe('default-board-done');
       expect(cardDone?.status).toBe('Completed');
     });
 
@@ -538,7 +538,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // PM handles task:created
       await new Promise(r => setTimeout(r, 50));
       const card = kanbanConnector.getCardByTaskId('task-flow-fail');
-      expect(card?.columnId).toBe('todo');
+      expect(card?.columnId).toBe('default-board-todo');
 
       // 2. Claim and process task
       const claimed = queue.claimNext(agentRouter);
@@ -561,7 +561,7 @@ describe('Phase 4 - Swarms, Messaging, Kanban, and Delegation Integration Tests'
       // PM resets task status in queue to 'pending'
       await new Promise(r => setTimeout(r, 100));
       const cardUpdated = kanbanConnector.getCardByTaskId('task-flow-fail');
-      expect(cardUpdated?.columnId).toBe('in-progress');
+      expect(cardUpdated?.columnId).toBe('default-board-in-progress');
       expect(cardUpdated?.status).toBe('Changes Requested');
 
       // Reconciled task queue check

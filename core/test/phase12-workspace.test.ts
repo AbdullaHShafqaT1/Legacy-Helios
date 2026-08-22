@@ -300,8 +300,9 @@ describe('WorkspaceManager — Kanban board workspace scoping', () => {
   let kanbanB: KanbanConnector;
   let boardIdA: string;
   let boardIdB: string;
-  let dbA: Database.Database;
-  let dbB: Database.Database;
+  let db: Database.Database;
+  let wsIdA: string;
+  let wsIdB: string;
 
   beforeEach(async () => {
     tmpDir = makeTempDir('kanban-iso');
@@ -310,44 +311,40 @@ describe('WorkspaceManager — Kanban board workspace scoping', () => {
     fs.mkdirSync(wsRootA, { recursive: true });
     fs.mkdirSync(wsRootB, { recursive: true });
 
-    // Use separate in-memory databases to avoid column ID (todo/in-progress) collision
-    // Column IDs are board-scoped by board_id FK, but their PK 'id' is simple (e.g. 'todo')
-    // so two boards sharing the same DB would collide on kanban_columns.id UNIQUE.
-    dbA = openDb(':memory:');
-    dbB = openDb(':memory:');
+    // Use a single database to verify that the board-prefixed column IDs
+    // prevent UNIQUE constraint violations in a single production database.
+    db = openDb(':memory:');
 
-    const wmA = new WorkspaceManager(dbA, logger);
-    const wmB = new WorkspaceManager(dbB, logger);
-    const wsIdA = wmA.createWorkspace('kanban-ws-a', wsRootA).id;
-    const wsIdB = wmB.createWorkspace('kanban-ws-b', wsRootB).id;
+    const wm = new WorkspaceManager(db, logger);
+    wsIdA = wm.createWorkspace('kanban-ws-a', wsRootA).id;
+    wsIdB = wm.createWorkspace('kanban-ws-b', wsRootB).id;
 
-    const auditLogA = new AuditLog(dbA);
-    const auditLogB = new AuditLog(dbB);
-    const gatekeeperA = new PermissionGatekeeper(auditLogA, logger, async () => true);
-    const gatekeeperB = new PermissionGatekeeper(auditLogB, logger, async () => true);
+    const auditLog = new AuditLog(db);
+    const gatekeeper = new PermissionGatekeeper(auditLog, logger, async () => true);
 
     boardIdA = `board-a`;
     boardIdB = `board-b`;
 
-    kanbanA = new KanbanConnector(dbA, gatekeeperA, auditLogA, logger, boardIdA, 'Workspace A Board', wsIdA);
-    kanbanB = new KanbanConnector(dbB, gatekeeperB, auditLogB, logger, boardIdB, 'Workspace B Board', wsIdB);
+    kanbanA = new KanbanConnector(db, gatekeeper, auditLog, logger, boardIdA, 'Workspace A Board', wsIdA);
+    kanbanB = new KanbanConnector(db, gatekeeper, auditLog, logger, boardIdB, 'Workspace B Board', wsIdB);
 
+    // Initializing both boards in the SAME database now succeeds without UNIQUE constraint collision
     await kanbanA.initDefaultBoard('project-manager');
     await kanbanB.initDefaultBoard('project-manager');
   });
 
   afterEach(() => {
-    dbA.close();
-    dbB.close();
+    db.close();
     cleanupDir(tmpDir);
   });
 
   it('boards belong to their respective workspaces', () => {
-    // Each board lives in its own DB — just verify it exists
-    const statusA = kanbanA.getBoardStatus(boardIdA);
-    const statusB = kanbanB.getBoardStatus(boardIdB);
-    expect(statusA).toContain('Workspace A Board');
-    expect(statusB).toContain('Workspace B Board');
+    const boardsA = kanbanA.getBoardsForWorkspace(wsIdA);
+    const boardsB = kanbanB.getBoardsForWorkspace(wsIdB);
+    expect(boardsA).toHaveLength(1);
+    expect(boardsB).toHaveLength(1);
+    expect(boardsA[0].id).toBe(boardIdA);
+    expect(boardsB[0].id).toBe(boardIdB);
   });
 
   it('cards in workspace A board are not visible when querying workspace B board', async () => {
@@ -363,7 +360,8 @@ describe('WorkspaceManager — Kanban board workspace scoping', () => {
 
     expect(cardsA).toHaveLength(1);
     expect(cardsA[0].title).toBe('Task in Workspace A');
-    // Workspace B board (separate DB) has no cards
+    expect(cardsA[0].columnId).toBe('board-a-todo'); // Verify prefix is returned
+    // Workspace B board has no cards
     expect(cardsB).toHaveLength(0);
   });
 });

@@ -80,6 +80,17 @@ export class KanbanConnector {
     return decision.correlationId;
   }
 
+  private resolveColumnId(colId: string, boardId: string): string {
+    const colSlug = colId.toLowerCase().replace(' ', '-');
+    if (['todo', 'in-progress', 'review', 'done'].includes(colSlug)) {
+      return `${boardId}-${colSlug}`;
+    }
+    if (colId.startsWith(`${boardId}-`)) {
+      return colId;
+    }
+    return `${boardId}-${colId}`;
+  }
+
   async initDefaultBoard(actor: string, boardId = this.defaultBoardId, name = this.defaultBoardName, workspaceId: string | null = this.defaultWorkspaceId): Promise<void> {
     const existing = this.db.prepare('SELECT id FROM kanban_boards WHERE id = ?').get(boardId);
     if (existing) return;
@@ -95,10 +106,11 @@ export class KanbanConnector {
 
         const columns = ['Todo', 'In Progress', 'Review', 'Done'];
         columns.forEach((colName, index) => {
+          const colSlug = colName.toLowerCase().replace(' ', '-');
           this.db.prepare(`
             INSERT INTO kanban_columns (id, board_id, name, position, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-          `).run(colName.toLowerCase().replace(' ', '-'), boardId, colName, index, now, now);
+          `).run(`${boardId}-${colSlug}`, boardId, colName, index, now, now);
         });
       })();
 
@@ -116,18 +128,19 @@ export class KanbanConnector {
   ): Promise<void> {
     const correlationId = await this.authorizeWrite(actor, 'createCard', params);
     const now = new Date().toISOString();
+    const resolvedColId = this.resolveColumnId(params.columnId, this.defaultBoardId);
 
     try {
       this.db.prepare(`
         INSERT INTO kanban_cards (id, column_id, task_id, title, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(params.id, params.columnId, params.taskId ?? null, params.title, params.status, now, now);
+      `).run(params.id, resolvedColId, params.taskId ?? null, params.title, params.status, now, now);
 
       this.auditLog.recordOutcome(
         correlationId,
         actor,
         'kanban-write',
-        `success — created card "${params.title}" in column ${params.columnId}`
+        `success — created card "${params.title}" in column ${resolvedColId}`
       );
     } catch (err: any) {
       const errMsg = err?.message || String(err);
@@ -142,6 +155,7 @@ export class KanbanConnector {
   ): Promise<void> {
     const correlationId = await this.authorizeWrite(actor, 'moveCard', params);
     const now = new Date().toISOString();
+    const resolvedColId = this.resolveColumnId(params.columnId, this.defaultBoardId);
 
     try {
       const stmt = this.db.prepare(`
@@ -149,7 +163,7 @@ export class KanbanConnector {
         SET column_id = ?, status = ?, updated_at = ?
         WHERE id = ?
       `);
-      const result = stmt.run(params.columnId, params.status, now, params.cardId);
+      const result = stmt.run(resolvedColId, params.status, now, params.cardId);
 
       if (result.changes === 0) {
         throw new Error(`Kanban card with ID "${params.cardId}" not found.`);
@@ -159,7 +173,7 @@ export class KanbanConnector {
         correlationId,
         actor,
         'kanban-write',
-        `success — moved card ${params.cardId} to column ${params.columnId}`
+        `success — moved card ${params.cardId} to column ${resolvedColId}`
       );
     } catch (err: any) {
       const errMsg = err?.message || String(err);
