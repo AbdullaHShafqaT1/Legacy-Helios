@@ -30,6 +30,9 @@ We chose to implement a lightweight, local-loopback-only HTTP and WebSocket serv
 * **Voice-Cannot-Approve Enforcement**:
   * Dashboard approvals update the `pending_approvals` table. Gated orchestrator tasks check this status.
   * If a task's source is marked as `'voice'`, the dashboard server blocks the approval request, returning a `403 Forbidden` error. This preserves the voice-cannot-approve boundary, forcing users to use standard text/CLI overrides.
+* **High-Friction Approval Enforcement**:
+  * High-friction actions (like `git-force-push`, `git-history-rewrite`, `destructive`, or `terminal-run`) are gated at the server level.
+  * The server-side `/api/approve` endpoint requires an explicit confirmation flag (`confirmed: true`) in the request payload for these specific actions. Requests lacking this flag are rejected with `400 Bad Request` to prevent accidental confirmation of dangerous commands.
 
 ---
 

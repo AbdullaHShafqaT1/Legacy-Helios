@@ -8,12 +8,14 @@ import { ModelRouter } from '../src/router/modelRouter.js';
 import { loadConfig } from '../src/lib/config.js';
 
 describe('Phase 14 Continuous Duplex Audio Server tests', () => {
+  let activeClients: WebSocket[] = [];
   let server: DuplexAudioServer;
   let modelRouter: ModelRouter;
   const logger = pino({ level: 'silent' });
   const port = 8089;
 
   beforeEach(() => {
+    activeClients = [];
     // Inject custom config
     process.env.JARVIS_DUPLEX_PORT = port.toString();
     process.env.JARVIS_DUPLEX_INTERRUPT_THRESHOLD = '0.02';
@@ -40,11 +42,18 @@ describe('Phase 14 Continuous Duplex Audio Server tests', () => {
   });
 
   afterEach(() => {
+    for (const client of activeClients) {
+      try {
+        client.close();
+      } catch {}
+    }
+    activeClients = [];
     server.stop();
   });
 
   it('allows client connection and starts/stops WebSocket server cleanly', async () => {
     const client = new WebSocket(`ws://localhost:${port}`);
+    activeClients.push(client);
     
     await new Promise<void>((resolve, reject) => {
       client.on('open', () => {
@@ -61,6 +70,7 @@ describe('Phase 14 Continuous Duplex Audio Server tests', () => {
 
   it('computes RMS amplitude and detects barge-in user voice interruption', async () => {
     const client = new WebSocket(`ws://localhost:${port}`);
+    activeClients.push(client);
     
     await new Promise<void>((resolve) => {
       client.on('open', resolve);
@@ -122,6 +132,7 @@ describe('Phase 14 Continuous Duplex Audio Server tests', () => {
 
   it('triggers transcription and response synthesis on sustained user silence', async () => {
     const client = new WebSocket(`ws://localhost:${port}`);
+    activeClients.push(client);
     
     await new Promise<void>((resolve) => {
       client.on('open', resolve);
@@ -162,4 +173,4 @@ describe('Phase 14 Continuous Duplex Audio Server tests', () => {
     expect(binaryReplyReceived).toBe(true);
     client.close();
   });
-});
+}, 30000);

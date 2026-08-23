@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { VoiceManager } from '../src/voice/VoiceManager.js';
 import { MockAudioEngine } from '../src/voice/engines/MockAudioEngine.js';
 import { LocalAudioEngine } from '../src/voice/engines/LocalAudioEngine.js';
-import { loadConfig } from '../src/lib/config.js';
+import { loadConfig, clearConfigCache } from '../src/lib/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,6 +125,8 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
     delete process.env.FORCE_STT_FAILURE;
     delete process.env.FORCE_TTS_FAILURE;
+    process.env.JARVIS_CI_FALLBACK = 'true';
+    clearConfigCache();
   });
 
   afterEach(() => {
@@ -139,6 +141,8 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     delete process.env.JARVIS_WAKE_WORD_THRESHOLD;
     delete process.env.FORCE_STT_FAILURE;
     delete process.env.FORCE_TTS_FAILURE;
+    delete process.env.JARVIS_CI_FALLBACK;
+    clearConfigCache();
     vi.restoreAllMocks();
   });
 
@@ -147,6 +151,8 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
   });
 
   it('Objective 6: fails fast if model files are missing/corrupted at startup', async () => {
+    delete process.env.JARVIS_CI_FALLBACK;
+    clearConfigCache();
     // Spy on os.homedir to point to a non-existent directory
     vi.spyOn(os, 'homedir').mockReturnValue('/nonexistent-whisper-cache-directory');
     

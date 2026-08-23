@@ -14,13 +14,23 @@
  * Live tray display is documented as a manual verification step.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TrayManager } from '../../services/TrayManager.js';
 import { JarvisEventBus } from '../../core/src/events/bus.js';
 import { HealthMonitor } from '../../core/src/lib/health.js';
 import pino from 'pino';
 
 const logger = pino({ level: 'silent' });
+let activeTrayManagers: TrayManager[] = [];
+
+afterEach(() => {
+  for (const tm of activeTrayManagers) {
+    try {
+      tm.stop();
+    } catch {}
+  }
+  activeTrayManagers = [];
+});
 
 function makeHealthMonitor(): HealthMonitor {
   return new HealthMonitor(logger);
@@ -46,6 +56,7 @@ describe('TrayManager — emergency stop routing', () => {
       db,
       logger,
     });
+    activeTrayManagers.push(trayManager);
 
     const handler = vi.fn();
     eventBus.on('queue:emergency-stop', handler);
@@ -62,6 +73,7 @@ describe('TrayManager — emergency stop routing', () => {
     const db = makeMockDb();
 
     const trayManager = new TrayManager({ eventBus, healthMonitor, db, logger });
+    activeTrayManagers.push(trayManager);
 
     // Track all emits
     const emittedEvents: string[] = [];
@@ -79,6 +91,7 @@ describe('TrayManager — emergency stop routing', () => {
     const healthMonitor = makeHealthMonitor();
     const db = makeMockDb();
     const trayManager = new TrayManager({ eventBus, healthMonitor, db, logger });
+    activeTrayManagers.push(trayManager);
 
     const handler = vi.fn();
     eventBus.on('queue:emergency-stop', handler);
@@ -104,6 +117,7 @@ describe('TrayManager — graceful headless fallback', () => {
       // Provide a non-existent icon path — in headless env, systray will fail anyway
       iconPath: '/tmp/nonexistent-icon.png',
     });
+    activeTrayManagers.push(trayManager);
 
     // Must not throw regardless of whether node-systray is available or not
     await expect(trayManager.init()).resolves.not.toThrow();
@@ -121,6 +135,7 @@ describe('TrayManager — graceful headless fallback', () => {
       logger,
       iconPath: '/tmp/nonexistent-icon.png',
     });
+    activeTrayManagers.push(trayManager);
 
     await trayManager.init();
 
@@ -138,6 +153,7 @@ describe('TrayManager — graceful headless fallback', () => {
     const db = makeMockDb();
 
     const trayManager = new TrayManager({ eventBus, healthMonitor, db, logger });
+    activeTrayManagers.push(trayManager);
 
     // stop() before init — must not throw
     expect(() => trayManager.stop()).not.toThrow();
@@ -154,6 +170,7 @@ describe('TrayManager — graceful headless fallback', () => {
     const db = makeMockDb();
 
     const trayManager = new TrayManager({ eventBus, healthMonitor, db, logger });
+    activeTrayManagers.push(trayManager);
     await trayManager.init();
 
     const handler = vi.fn();
@@ -171,6 +188,7 @@ describe('TrayManager — tray emergency stop routes same path as Phase 10/11 ov
     const healthMonitor = makeHealthMonitor();
     const db = makeMockDb();
     const trayManager = new TrayManager({ eventBus, healthMonitor, db, logger });
+    activeTrayManagers.push(trayManager);
 
     const stopEvents: string[] = [];
     eventBus.on('queue:emergency-stop', () => stopEvents.push('stop'));
