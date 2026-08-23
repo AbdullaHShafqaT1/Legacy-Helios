@@ -12,7 +12,7 @@ let currentState = STATE.IDLE;
 let ws           = null;
 let recognition  = null;
 let speaking     = false;
-const autoListenActive = true;
+let autoListenActive = true;
 
 // ── DOM refs ──────────────────────────────────────────────────
 const orbWrap       = document.getElementById('orb-wrap');
@@ -58,12 +58,7 @@ function connectWS() {
     statusLabel.textContent = 'ONLINE';
     statusLabel.className   = 'status-label online';
     setState(STATE.IDLE);
-    stateSublabel.textContent = 'Jarvis online. Say something.';
-    if (autoListenActive && recognition) {
-      setTimeout(() => {
-        try { recognition.start(); } catch {}
-      }, 1000);
-    }
+    stateSublabel.textContent = 'Jarvis online. Click anywhere to activate voice control.';
   });
 
   ws.addEventListener('close', () => {
@@ -248,6 +243,11 @@ function initSpeechRecognition() {
   recognition.addEventListener('error', (ev) => {
     micBtn.classList.remove('listening');
     setState(STATE.IDLE);
+    if (ev.error === 'not-allowed') {
+      stateSublabel.textContent = 'Microphone blocked. Please allow mic access in your browser address bar.';
+      appendMessage('error', 'Microphone access blocked. Click the lock icon in your address bar to allow.');
+      return;
+    }
     if (ev.error !== 'aborted' && ev.error !== 'no-speech') {
       appendMessage('error', `Mic error: ${ev.error}`);
     }
@@ -281,10 +281,16 @@ micBtn.addEventListener('click', () => {
   if (!recognition) return;
 
   if (currentState === STATE.LISTENING) {
+    autoListenActive = false;
     recognition.stop();
+    stateSublabel.textContent = 'Voice control deactivated. Click mic to resume.';
   } else {
+    autoListenActive = true;
     if (window.speechSynthesis) window.speechSynthesis.cancel();
-    try { recognition.start(); } catch {}
+    try {
+      recognition.start();
+      stateSublabel.textContent = 'Voice control active. Listening...';
+    } catch {}
   }
 });
 
@@ -297,6 +303,19 @@ clearBtn.addEventListener('click', () => {
 if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = () => {};
 }
+
+let interactionActivated = false;
+window.addEventListener('click', () => {
+  if (!interactionActivated) {
+    interactionActivated = true;
+    if (autoListenActive && recognition && currentState === STATE.IDLE) {
+      try {
+        recognition.start();
+        stateSublabel.textContent = 'Voice control active. Listening...';
+      } catch {}
+    }
+  }
+});
 
 // ── Init ──────────────────────────────────────────────────────
 initSpeechRecognition();

@@ -141,8 +141,10 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
           this.wakeWordProcess.kill('SIGKILL');
           this.wakeWordProcess = null;
         }
+        if (this.isListening) {
+          this.startTranscription();
+        }
         this.emit('wake-word');
-        this.startTranscription();
       }
     });
 

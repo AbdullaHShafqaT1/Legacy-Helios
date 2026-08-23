@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import { exec } from 'node:child_process';
 import { ConfigError } from '../core/src/lib/config.js';
 import { openCliContext, CliContext } from '../core/src/bootstrap.js';
 import { defaultStopSignalPath } from '../core/src/orchestrator.js';
@@ -363,14 +364,20 @@ async function run(): Promise<void> {
         const dashboardUrl = `http://localhost:${dashboardPort}`;
         const chatUrl = `http://localhost:${chatPort}`;
         const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-        import('node:child_process').then(({ exec }) => {
-          exec(`${startCmd} ${dashboardUrl}`);
-          exec(`${startCmd} ${chatUrl}`);
-        }).catch(() => {});
 
         console.log('[Voice] Wake word detected. Opening web interfaces and stopping local CLI listener.');
         voiceManager.stopListening();
-        process.exit(0);
+
+        let finished = 0;
+        const onFinish = () => {
+          finished++;
+          if (finished >= 2) {
+            process.exit(0);
+          }
+        };
+
+        exec(`${startCmd} ${dashboardUrl}`, () => onFinish());
+        exec(`${startCmd} ${chatUrl}`, () => onFinish());
       });
 
       await voiceManager.init();
