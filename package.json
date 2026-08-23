@@ -8,7 +8,7 @@
     "jarvis": "dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.js",
     "start": "tsx core/src/index.ts",
     "cli": "tsx cli/index.ts",
     "test": "vitest run"

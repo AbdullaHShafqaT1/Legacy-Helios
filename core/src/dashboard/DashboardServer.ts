@@ -198,8 +198,20 @@ export class DashboardServer {
       return;
     }
 
-    if (req.method === 'POST' && pathname === '/api/deny') {
-      this.handleApprovalRequest(req, res, 'denied');
+    if (req.method === 'POST' && pathname === '/api/stop-listening') {
+      try {
+        const scratchDir = path.resolve(this.config.projectRoot, 'memory-store');
+        if (!fs.existsSync(scratchDir)) {
+          fs.mkdirSync(scratchDir, { recursive: true });
+        }
+        const stopFilePath = path.join(scratchDir, 'STOP_LISTENING');
+        fs.writeFileSync(stopFilePath, '');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
       return;
     }
 
@@ -749,6 +761,8 @@ export class DashboardServer {
     <div class="logo-container">
       <div class="pulse"></div>
       <div class="logo">HELIOS OS</div>
+      <button class="btn-deny" style="margin-left: 20px; background: #ef4444; border: none; color: white;" onclick="stopVoiceListening()">Stop Voice Listening</button>
+      <a href="http://localhost:3000" target="_blank" style="margin-left: 20px; color: #60a5fa; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 5px;">Open Chat UI</a>
     </div>
     <div class="active-workspace" id="active-workspace">
       Default Workspace
@@ -935,6 +949,22 @@ export class DashboardServer {
         }
       } catch (err) {
         alert('Failed to resolve action: ' + err.message);
+      }
+    }
+
+    async function stopVoiceListening() {
+      try {
+        const res = await fetch('/api/stop-listening', {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Voice listening stop signal sent.');
+        } else if (data.error) {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Failed to stop listening: ' + err.message);
       }
     }
   </script>

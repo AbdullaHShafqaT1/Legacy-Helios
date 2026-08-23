@@ -90,7 +90,7 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
   }
 
   startListening(): void {
-    if (this.isListening) return;
+    if (this.wakeWordProcess) return;
     this.isListening = true;
 
     const config = loadConfig(false);
@@ -137,6 +137,10 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
     this.wakeWordProcess.stdout?.on('data', (data) => {
       const output = data.toString();
       if (output.includes('WAKE_WORD_DETECTED')) {
+        if (this.wakeWordProcess) {
+          this.wakeWordProcess.kill('SIGKILL');
+          this.wakeWordProcess = null;
+        }
         this.emit('wake-word');
         this.startTranscription();
       }
@@ -171,7 +175,7 @@ export class LocalAudioEngine extends EventEmitter implements AudioEngine {
     });
   }
 
-  private startTranscription(): void {
+  public startTranscription(): void {
     this.logger.info('STT Engine recording/transcribing...');
     
     const config = loadConfig(false);

@@ -102,7 +102,9 @@ def main():
 
             recording = sd.rec(int(args.duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=device)
             sd.wait()
-            print("Recording finished.", file=sys.stderr, flush=True)
+            max_amp = np.max(np.abs(recording))
+            avg_energy = np.mean(recording ** 2)
+            print(f"Recording finished. Max amplitude: {max_amp:.6f}, Avg energy: {avg_energy:.6f}", file=sys.stderr, flush=True)
             
             # Save to a temp wav file
             temp_fd, audio_path = tempfile.mkstemp(suffix=".wav")
@@ -130,7 +132,7 @@ def main():
             audio_array = load_audio_without_ffmpeg(audio_path, target_sr=16000)
             
             # Transcribe audio array
-            result = model.transcribe(audio_array)
+            result = model.transcribe(audio_array, fp16=False)
             
             # Calculate confidence from avg_logprob
             segments = result.get('segments', [])

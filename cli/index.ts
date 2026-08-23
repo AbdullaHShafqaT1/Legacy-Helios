@@ -338,6 +338,8 @@ async function run(): Promise<void> {
       const voiceManager = new VoiceManager(engine, ctx.logger, {
         sttConfidenceThreshold: 0.8,
         wakeWordSensitivity: 0.5,
+        continuousListening: true,
+        continuousTimeoutMs: 9999999, // practically disabled, stopped only via stop button
       });
 
       // EXACT SAME submission path as 'submit'
@@ -353,6 +355,22 @@ async function run(): Promise<void> {
           console.error(`[Voice] Failed to submit task: ${e.message}`);
           voiceManager.speak("I'm sorry, I couldn't submit that task.").catch(() => {});
         }
+      });
+
+      voiceManager.on('wake-word', () => {
+        const dashboardPort = ctx!.config.dashboardPort || 8086;
+        const chatPort = 3000;
+        const dashboardUrl = `http://localhost:${dashboardPort}`;
+        const chatUrl = `http://localhost:${chatPort}`;
+        const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+        import('node:child_process').then(({ exec }) => {
+          exec(`${startCmd} ${dashboardUrl}`);
+          exec(`${startCmd} ${chatUrl}`);
+        }).catch(() => {});
+
+        console.log('[Voice] Wake word detected. Opening web interfaces and stopping local CLI listener.');
+        voiceManager.stopListening();
+        process.exit(0);
       });
 
       await voiceManager.init();

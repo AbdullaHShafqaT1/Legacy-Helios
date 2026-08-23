@@ -155,9 +155,11 @@ def main():
                     device = args.input_device
 
             if engine_name == "openwakeword":
+                import numpy as np
                 def callback_oww(indata, frames, time, status):
-                    audio_chunk = indata[:, 0]
-                    prediction = model.predict(audio_chunk)
+                    # Convert float32 from [-1.0, 1.0] to 16-bit signed integer PCM range
+                    pcm = (indata[:, 0] * 32767.0).astype(np.int16)
+                    prediction = model.predict(pcm)
                     for key, prob in prediction.items():
                         if prob >= args.threshold:
                             print("WAKE_WORD_DETECTED", flush=True)

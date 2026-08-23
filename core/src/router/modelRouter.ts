@@ -59,15 +59,9 @@ export class ModelRouter {
     }
 
     if (!route) {
-      if (taskType === 'vision') {
-        // Prefer local Ollama/llava route for vision by default
-        route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector')
-             || this.routes.find(r => r.taskTypes.includes(taskType));
-      } else {
-        // Prefer cloud Claude route for coding/reasoning/research by default
-        route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'ClaudeConnector')
-             || this.routes.find(r => r.taskTypes.includes(taskType));
-      }
+      // Prefer local OllamaConnector by default for all task types
+      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector')
+           || this.routes.find(r => r.taskTypes.includes(taskType));
     }
     
     if (!route) {

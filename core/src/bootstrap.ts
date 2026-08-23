@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import { Logger } from 'pino';
+import { spawn, ChildProcess } from 'node:child_process';
+import path from 'node:path';
 import { loadConfig, Config } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
 import { openDb } from './queue/db.js';
@@ -268,10 +270,25 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     periodicCaptureManager,
   });
 
+  let webProcess: ChildProcess | null = null;
   // Only start the duplex voice server in production, not in Vitest test runs to avoid port collision
   if (!process.env.VITEST) {
     duplexAudioServer.start();
     dashboardServer.start();
+
+    try {
+      const webServerPath = path.resolve(config.projectRoot, 'apps/web/server.ts');
+      webProcess = spawn('npx', ['tsx', webServerPath], {
+        env: { ...process.env, JARVIS_WEB_PORT: '3000' },
+        stdio: 'inherit',
+        shell: true
+      });
+      webProcess.on('error', (err) => {
+        logger.error({ err }, 'Failed to start Chat Web UI Server');
+      });
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to bootstrap Chat Web UI Server process');
+    }
   }
 
   healthMonitor.transition('browser', 'HEALTHY');
@@ -451,6 +468,15 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       dashboardServer.stop();
     } catch (err: any) {
       logger.error({ err }, 'Failed to stop dashboard server during shutdown.');
+    }
+
+    // Terminate Chat Web UI server
+    if (webProcess) {
+      try {
+        webProcess.kill('SIGTERM');
+      } catch (err: any) {
+        logger.error({ err }, 'Failed to terminate Chat Web UI Server during shutdown.');
+      }
     }
 
     // Terminate desktop sessions

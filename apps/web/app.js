@@ -12,6 +12,7 @@ let currentState = STATE.IDLE;
 let ws           = null;
 let recognition  = null;
 let speaking     = false;
+const autoListenActive = true;
 
 // ── DOM refs ──────────────────────────────────────────────────
 const orbWrap       = document.getElementById('orb-wrap');
@@ -58,6 +59,11 @@ function connectWS() {
     statusLabel.className   = 'status-label online';
     setState(STATE.IDLE);
     stateSublabel.textContent = 'Jarvis online. Say something.';
+    if (autoListenActive && recognition) {
+      setTimeout(() => {
+        try { recognition.start(); } catch {}
+      }, 1000);
+    }
   });
 
   ws.addEventListener('close', () => {
@@ -187,7 +193,14 @@ function speakText(text) {
   utt.pitch  = 0.9;
   utt.volume = 1.0;
   utt.onstart = () => setState(STATE.SPEAKING);
-  utt.onend   = () => { if (!speaking) setState(STATE.IDLE); };
+  utt.onend   = () => {
+    if (!speaking) setState(STATE.IDLE);
+    if (autoListenActive && recognition) {
+      setTimeout(() => {
+        try { recognition.start(); } catch {}
+      }, 400);
+    }
+  };
   window.speechSynthesis.speak(utt);
 }
 
@@ -225,6 +238,11 @@ function initSpeechRecognition() {
   recognition.addEventListener('end', () => {
     micBtn.classList.remove('listening');
     if (currentState === STATE.LISTENING) setState(STATE.IDLE);
+    if (autoListenActive && currentState === STATE.IDLE) {
+      setTimeout(() => {
+        try { recognition.start(); } catch {}
+      }, 400);
+    }
   });
 
   recognition.addEventListener('error', (ev) => {
@@ -232,6 +250,11 @@ function initSpeechRecognition() {
     setState(STATE.IDLE);
     if (ev.error !== 'aborted' && ev.error !== 'no-speech') {
       appendMessage('error', `Mic error: ${ev.error}`);
+    }
+    if (autoListenActive && currentState === STATE.IDLE) {
+      setTimeout(() => {
+        try { recognition.start(); } catch {}
+      }, 1000);
     }
   });
 }
