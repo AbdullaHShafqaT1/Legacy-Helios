@@ -138,18 +138,14 @@ export class DesktopConnector {
     return { granted: true, correlationId: authorization.correlationId };
   }
 
-  private async executeScript(args: string[]): Promise<void> {
+  private async executeScript(payload: any): Promise<void> {
     const config = loadConfig(false);
-    const scriptPath = path.resolve(config.projectRoot, 'scripts/desktop_input.ps1');
+    const scriptPath = path.resolve(config.projectRoot, 'tools/desktop_control.py');
 
     await new Promise<void>((resolve, reject) => {
-      const ps = spawn('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
+      const ps = spawn('python', [
         scriptPath,
-        ...args
+        JSON.stringify(payload)
       ]);
 
       const timeout = setTimeout(() => {
@@ -179,42 +175,53 @@ export class DesktopConnector {
   }
 
   async moveMouse(actor: AgentRole, x: number, y: number, display?: number): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-mouse', { x, y, display }, ['move', x.toString(), y.toString()]);
+    return this.runAction(actor, 'desktop-mouse', { action: 'move', x, y, display });
   }
 
   async click(actor: AgentRole, x: number, y: number, display?: number): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-mouse', { x, y, display }, ['click', x.toString(), y.toString()]);
+    return this.runAction(actor, 'desktop-mouse', { action: 'click', x, y, display });
   }
 
   async doubleClick(actor: AgentRole, x: number, y: number, display?: number): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-mouse', { x, y, display }, ['doubleclick', x.toString(), y.toString()]);
+    return this.runAction(actor, 'desktop-mouse', { action: 'doubleclick', x, y, display });
   }
 
   async rightClick(actor: AgentRole, x: number, y: number, display?: number): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-mouse', { x, y, display }, ['rightclick', x.toString(), y.toString()]);
+    return this.runAction(actor, 'desktop-mouse', { action: 'rightclick', x, y, display });
+  }
+
+  async dragMouse(actor: AgentRole, x: number, y: number, display?: number): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', { action: 'drag', x, y, display });
   }
 
   async scroll(actor: AgentRole, amount: number): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-mouse', { amount }, ['scroll', amount.toString()]);
+    return this.runAction(actor, 'desktop-mouse', { action: 'scroll', amount });
   }
 
   async typeText(actor: AgentRole, text: string): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-keyboard', { text }, ['type', text]);
+    return this.runAction(actor, 'desktop-keyboard', { action: 'type', text });
   }
 
   async pressKey(actor: AgentRole, key: string): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-keyboard', { key }, ['press', key]);
+    return this.runAction(actor, 'desktop-keyboard', { action: 'press', key });
   }
 
   async hotkey(actor: AgentRole, keys: string): Promise<DesktopActionResult> {
-    return this.runAction(actor, 'desktop-keyboard', { keys }, ['hotkey', keys]);
+    return this.runAction(actor, 'desktop-keyboard', { action: 'hotkey', keys });
+  }
+
+  async cloudcodeOversight(actor: AgentRole, url: string, workspace: string): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-keyboard', { action: 'cloudcode_oversight', url, workspace });
+  }
+
+  async captureScreen(actor: AgentRole): Promise<any> {
+    return this.visionConnector.captureScreen(actor);
   }
 
   private async runAction(
     actor: AgentRole,
     action: 'desktop-mouse' | 'desktop-keyboard',
-    params: any,
-    args: string[]
+    params: any
   ): Promise<DesktopActionResult> {
     const safety = await this.validateSafety(actor, action, params);
     if (!safety.granted) {
@@ -239,7 +246,7 @@ export class DesktopConnector {
     }
 
     try {
-      await this.executeScript(args);
+      await this.executeScript(params);
 
       let screenshotPathAfter: string | undefined;
       try {
@@ -253,12 +260,12 @@ export class DesktopConnector {
         safety.correlationId,
         actor,
         action,
-        `success — executed desktop command [${args[0]}]`
+        `success — executed desktop command [${params.action}]`
       );
 
       return {
         status: 'SUCCESS',
-        message: `Successfully executed desktop action: ${args.join(' ')}`,
+        message: `Successfully executed desktop action: ${params.action}`,
         screenshotPathBefore,
         screenshotPathAfter,
       };

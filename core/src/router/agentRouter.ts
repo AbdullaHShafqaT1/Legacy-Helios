@@ -83,6 +83,13 @@ export class AgentRouter {
         desc.includes('#software-engineer')
       ) {
         agentName = 'software-engineer';
+      } else if (
+        desc.includes('[desktop]') ||
+        desc.includes('#desktop') ||
+        desc.includes('[desktop-operator]') ||
+        desc.includes('#desktop-operator')
+      ) {
+        agentName = 'desktop-operator';
       }
     }
 
@@ -111,6 +118,9 @@ export class AgentRouter {
     }
     if (normalized === 'pm' || normalized === 'project-manager') {
       return 'project-manager';
+    }
+    if (normalized === 'desktop' || normalized === 'desktop-operator') {
+      return 'desktop-operator';
     }
     return target;
   }

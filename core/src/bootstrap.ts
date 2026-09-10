@@ -33,6 +33,7 @@ import { BrowserConnector } from '../../connectors/browser/BrowserConnector.js';
 import { TerminalConnector } from '../../connectors/terminal/TerminalConnector.js';
 import { BrowserOperatorAgent } from '../../agents/browser-operator/BrowserOperatorAgent.js';
 import { TerminalOperatorAgent } from '../../agents/terminal-operator/TerminalOperatorAgent.js';
+import { DesktopOperatorAgent } from '../../agents/desktop-operator/DesktopOperatorAgent.js';
 import { ComputerVisionConnector } from '../../connectors/vision/ComputerVisionConnector.js';
 import { DesktopConnector } from '../../connectors/desktop/DesktopConnector.js';
 import { OverrideHookConnector } from '../../connectors/override/OverrideHookConnector.js';
@@ -381,6 +382,15 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     messageRouter
   );
   agentRouter.register(terminalOperator);
+
+  const desktopOperator = new DesktopOperatorAgent(
+    modelRouter,
+    desktopConnector,
+    memoryManager,
+    createLogger('agent:desktop-operator', config.logLevel),
+    messageRouter
+  );
+  agentRouter.register(desktopOperator);
 
   // Subscribe Project Manager to event bus lifecycle events
   eventBus.on('task:created', (data) => {

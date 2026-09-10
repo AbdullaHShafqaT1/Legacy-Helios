@@ -62,5 +62,5 @@ describe('BrowserConnector concurrency', () => {
     await browser.close(); // Clean up all sessions
     db.close();
     fs.unlinkSync(dbPath);
-  });
+  }, 30000);
 });

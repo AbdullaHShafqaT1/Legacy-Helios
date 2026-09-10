@@ -27,6 +27,7 @@ export type AgentRole =
   | 'project-manager'
   | 'browser-operator'
   | 'terminal-operator'
+  | 'desktop-operator'
   | 'system'; // 'system' is used as an approver sometimes
 
 export interface AgentPolicy {
@@ -84,6 +85,10 @@ export const DEFAULT_AGENT_POLICIES: PolicyMap = {
   },
   'terminal-operator': {
     allowedActions: ['terminal-run', 'memory-read', 'memory-write', 'vision-read', 'vision-periodic-start', 'web-search', 'desktop-mouse', 'desktop-keyboard'],
+    autoApproveActions: ['memory-read', 'vision-read'],
+  },
+  'desktop-operator': {
+    allowedActions: ['desktop-mouse', 'desktop-keyboard', 'memory-read', 'memory-write', 'vision-read', 'vision-periodic-start'],
     autoApproveActions: ['memory-read', 'vision-read'],
   },
   'system': {
