@@ -90,6 +90,9 @@ function formatAuditAction(action: string, paramsJson: string | null): string | 
   try {
     const params = JSON.parse(paramsJson);
     if (action === 'desktop-keyboard') {
+      if (params.action === 'focus_window') {
+        return `Action: Focusing window (${params.target_window || 'browser'})`;
+      }
       if (params.action === 'hotkey') {
         const keys = params.keys || params.key;
         return `Action: Executing hotkey (${Array.isArray(keys) ? keys.join('+') : keys})`;
@@ -258,6 +261,8 @@ wss.on('connection', async (ws: WebSocket) => {
       const startTime = Date.now();
       const MAX_WAIT_MS = 180_000; // 3 minutes timeout
 
+      let hasEmittedVisionObservation = false;
+
       const monitorInterval = setInterval(() => {
         try {
           if (!cliCtx) {
@@ -292,6 +297,10 @@ wss.on('connection', async (ws: WebSocket) => {
 
             for (const row of auditRows) {
               lastAuditId = Math.max(lastAuditId, row.id);
+              if (row.action === 'vision-read') {
+                if (hasEmittedVisionObservation) continue;
+                hasEmittedVisionObservation = true;
+              }
               const auditKey = `${row.id}-${row.action}-${row.params_json}`;
               if (!emittedActions.has(auditKey)) {
                 emittedActions.add(auditKey);

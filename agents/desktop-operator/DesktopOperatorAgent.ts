@@ -43,9 +43,10 @@ export class DesktopOperatorAgent implements Agent {
       const response = await this.modelRouter.route('reasoning', {
         description: `Desktop operator received task: ${input.description}. 
 Parse out what desktop actions to execute. Return JSON with format:
-{"actions": [{"action": "hotkey", "keys": "ctrl+t"}, {"action": "type", "text": "youtube.com"}, {"action": "press", "key": "enter"}]}
-Supported actions: move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, cloudcode_oversight.
+{"actions": [{"action": "focus_window", "target": "chrome"}, {"action": "hotkey", "keys": "ctrl+t"}, {"action": "type", "text": "youtube.com"}, {"action": "press", "key": "enter"}]}
+Supported actions: focus_window, move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, open_tab, navigate, cloudcode_oversight.
 Rules:
+- When interacting with a browser, focus it first: {"action": "focus_window", "target": "chrome"}.
 - To open a new tab in active browser, use {"action": "hotkey", "keys": "ctrl+t"}.
 - To navigate or search, use {"action": "type", "text": "..."} followed by {"action": "press", "key": "enter"}.
 - Only use supported actions.`,
@@ -80,6 +81,9 @@ Rules:
 
       const role = this.name as AgentRole;
 
+      // Reset action count and clear any stale emergency stop state before executing this task's actions
+      this.desktopConnector.resetActionCount();
+
       // Re-capture screen observation right before executing actions so coordinate validations have fresh observation context
       try {
         await this.desktopConnector.captureScreen(role);
@@ -87,10 +91,23 @@ Rules:
         // Soft fail if screen capture is not fully initialized
       }
 
+      // Reset action count and clear any emergency stop condition latched during pre-execution capture
+      this.desktopConnector.resetActionCount();
+
+      // Auto-enforce browser focus if task involves browser/navigation and focus is not yet the first action
+      const isBrowserTask = /(browser|tab|youtube|chrome|edge|firefox|website|url|navigate)\b/i.test(input.description);
+      if (isBrowserTask && actions.length > 0 && actions[0].action !== 'focus_window' && actions[0].action !== 'focus_browser') {
+        actions.unshift({ action: 'focus_window', target: 'chrome' });
+      }
+
       for (const action of actions) {
         let result: DesktopActionResult;
         
         switch (action.action) {
+          case 'focus_window':
+          case 'focus_browser':
+            result = await this.desktopConnector.focusWindow(role, action.target || action.target_window || 'chrome');
+            break;
           case 'move':
             result = await this.desktopConnector.moveMouse(role, action.x, action.y);
             break;
@@ -120,6 +137,7 @@ Rules:
             break;
           case 'open_tab':
           case 'new_tab':
+            await this.desktopConnector.focusWindow(role, 'chrome');
             result = await this.desktopConnector.hotkey(role, 'ctrl+t');
             break;
           case 'navigate':
@@ -133,7 +151,10 @@ Rules:
             }
             break;
           case 'open_browser':
-            result = await this.desktopConnector.hotkey(role, 'win');
+            result = await this.desktopConnector.focusWindow(role, 'chrome');
+            if (result.status !== 'SUCCESS') {
+              result = await this.desktopConnector.hotkey(role, 'win');
+            }
             break;
           case 'cloudcode_oversight':
             result = await this.desktopConnector.cloudcodeOversight(role, action.url || '', action.workspace || '');

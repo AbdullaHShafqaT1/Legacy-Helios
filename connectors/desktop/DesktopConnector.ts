@@ -153,7 +153,11 @@ export class DesktopConnector {
         reject(new Error('Desktop interaction command timed out.'));
       }, config.desktopActionTimeoutMs);
 
+      let stdout = '';
       let stderr = '';
+      ps.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
       ps.stderr?.on('data', (chunk) => {
         stderr += chunk.toString();
       });
@@ -163,7 +167,8 @@ export class DesktopConnector {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`Desktop script failed with code ${code}. Stderr: ${stderr}`));
+          const detail = stderr.trim() || stdout.trim() || 'No error details provided';
+          reject(new Error(`Desktop script failed with code ${code}. Detail: ${detail}`));
         }
       });
 
@@ -208,6 +213,10 @@ export class DesktopConnector {
 
   async hotkey(actor: AgentRole, keys: string): Promise<DesktopActionResult> {
     return this.runAction(actor, 'desktop-keyboard', { action: 'hotkey', keys });
+  }
+
+  async focusWindow(actor: AgentRole, targetWindow?: string): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-keyboard', { action: 'focus_window', target_window: targetWindow });
   }
 
   async cloudcodeOversight(actor: AgentRole, url: string, workspace: string): Promise<DesktopActionResult> {

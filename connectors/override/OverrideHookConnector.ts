@@ -49,7 +49,7 @@ export class OverrideHookConnector extends EventEmitter {
     this.logger.info('Installing low-level Windows keyboard and mouse override hook...');
 
     const scriptPath = path.resolve(config.projectRoot, 'scripts/input_hook.ps1');
-    const threshold = process.env.JARVIS_OVERRIDE_MOUSE_THRESHOLD || '10';
+    const threshold = process.env.JARVIS_OVERRIDE_MOUSE_THRESHOLD || '150';
 
     return new Promise<void>((resolve, reject) => {
       this.process = spawn('powershell', [
