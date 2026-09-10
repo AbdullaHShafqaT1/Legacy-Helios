@@ -82,13 +82,18 @@ export class ComputerVisionConnector {
         preferredDisplay.toString(),
       ]);
 
+      let stdout = '';
+      let stderr = '';
+
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           ps.kill('SIGKILL');
           reject(new Error('Screenshot capture timed out.'));
         }, config.visionCaptureTimeoutMs);
 
-        let stderr = '';
+        ps.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString();
+        });
         ps.stderr?.on('data', (chunk) => {
           stderr += chunk.toString();
         });
@@ -110,12 +115,20 @@ export class ComputerVisionConnector {
 
       // Query display resolution
       const size = fs.statSync(targetPath).size;
+      let width = 1920;
+      let height = 1080;
+      const resMatch = stdout.trim().match(/(\d+)x(\d+)/);
+      if (resMatch) {
+        width = parseInt(resMatch[1], 10);
+        height = parseInt(resMatch[2], 10);
+      }
+
       const observation: DesktopObservation = {
         success: true,
         timestamp,
         display: preferredDisplay,
-        width: 1920, // Default fallback width metadata
-        height: 1080, // Default fallback height metadata
+        width,
+        height,
         screenshotPath: targetPath,
         imageFixtureFallbackUsed: false,
       };

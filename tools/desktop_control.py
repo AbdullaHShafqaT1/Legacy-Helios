@@ -187,35 +187,44 @@ def main():
 
         elif action == 'move':
             x, y = payload['x'], payload['y']
-            duration = payload.get('duration', 0.2)
+            duration = payload.get('duration', 0.8)
             pyautogui.moveTo(x, y, duration=duration)
             
         elif action == 'click':
             x, y = payload.get('x'), payload.get('y')
             clicks = payload.get('clicks', 1)
             button = payload.get('button', 'left')
+            duration = payload.get('duration', 0.8)
             if x is not None and y is not None:
-                pyautogui.click(x=x, y=y, clicks=clicks, button=button)
+                pyautogui.moveTo(x, y, duration=duration)
+                time.sleep(0.1)
+                pyautogui.click(clicks=clicks, button=button)
             else:
                 pyautogui.click(clicks=clicks, button=button)
                 
         elif action == 'doubleclick':
             x, y = payload.get('x'), payload.get('y')
+            duration = payload.get('duration', 0.8)
             if x is not None and y is not None:
-                pyautogui.doubleClick(x=x, y=y)
+                pyautogui.moveTo(x, y, duration=duration)
+                time.sleep(0.1)
+                pyautogui.doubleClick()
             else:
                 pyautogui.doubleClick()
                 
         elif action == 'rightclick':
             x, y = payload.get('x'), payload.get('y')
+            duration = payload.get('duration', 0.8)
             if x is not None and y is not None:
-                pyautogui.rightClick(x=x, y=y)
+                pyautogui.moveTo(x, y, duration=duration)
+                time.sleep(0.1)
+                pyautogui.rightClick()
             else:
                 pyautogui.rightClick()
                 
         elif action == 'drag':
             x, y = payload['x'], payload['y']
-            duration = payload.get('duration', 0.2)
+            duration = payload.get('duration', 1.0)
             button = payload.get('button', 'left')
             pyautogui.dragTo(x, y, duration=duration, button=button)
             

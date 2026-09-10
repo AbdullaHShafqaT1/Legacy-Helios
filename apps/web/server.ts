@@ -109,7 +109,7 @@ function formatAuditAction(action: string, paramsJson: string | null): string | 
       }
     } else if (action === 'desktop-mouse') {
       if (params.action === 'click') {
-        return `Action: Clicking mouse at (${params.x}, ${params.y})`;
+        return `Action: Gliding cursor and clicking at (${params.x}, ${params.y})`;
       }
       if (params.action === 'move') {
         return `Action: Moving mouse to (${params.x}, ${params.y})`;
