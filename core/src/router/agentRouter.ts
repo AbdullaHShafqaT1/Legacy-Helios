@@ -48,7 +48,7 @@ export class AgentRouter {
     if (task.file_context) {
       try {
         const fileCtx = JSON.parse(task.file_context);
-        const target = fileCtx.taskType || fileCtx.agent;
+        const target = fileCtx.taskType || fileCtx.agent || fileCtx.target;
         if (target) {
           agentName = this.mapTargetToAgentName(target);
         }
@@ -84,10 +84,31 @@ export class AgentRouter {
       ) {
         agentName = 'software-engineer';
       } else if (
+        desc.includes('[browser]') ||
+        desc.includes('#browser') ||
+        desc.includes('[browser-operator]') ||
+        desc.includes('#browser-operator')
+      ) {
+        agentName = 'browser-operator';
+      } else if (
+        desc.includes('[terminal]') ||
+        desc.includes('#terminal') ||
+        desc.includes('[terminal-operator]') ||
+        desc.includes('#terminal-operator')
+      ) {
+        agentName = 'terminal-operator';
+      } else if (
         desc.includes('[desktop]') ||
         desc.includes('#desktop') ||
         desc.includes('[desktop-operator]') ||
-        desc.includes('#desktop-operator')
+        desc.includes('#desktop-operator') ||
+        desc.includes('open a new tab') ||
+        desc.includes('open new tab') ||
+        desc.includes('active browser') ||
+        desc.includes('click the') ||
+        desc.includes('move mouse') ||
+        desc.includes('desktop screen') ||
+        desc.includes('on screen')
       ) {
         agentName = 'desktop-operator';
       }
@@ -118,6 +139,12 @@ export class AgentRouter {
     }
     if (normalized === 'pm' || normalized === 'project-manager') {
       return 'project-manager';
+    }
+    if (normalized === 'browser' || normalized === 'browser-operator') {
+      return 'browser-operator';
+    }
+    if (normalized === 'terminal' || normalized === 'terminal-operator') {
+      return 'terminal-operator';
     }
     if (normalized === 'desktop' || normalized === 'desktop-operator') {
       return 'desktop-operator';

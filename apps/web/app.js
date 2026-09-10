@@ -98,6 +98,9 @@ function connectWS() {
         appendMessage('error', `Core daemon mode sync error: ${msg.error}`);
       }
 
+    } else if (msg.type === 'system' || msg.type === 'progress') {
+      appendMessage('system', msg.text);
+
     } else if (msg.type === 'error') {
       removeThinkingIndicator();
       appendMessage('error', msg.text || 'Unknown error');

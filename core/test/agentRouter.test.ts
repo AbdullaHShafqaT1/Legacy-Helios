@@ -67,4 +67,31 @@ describe('AgentRouter Class', () => {
     const resolved = router.resolve(mockTask('test'));
     expect(resolved.name).toBe('agent-2');
   });
+
+  it('should route desktop tasks correctly via file_context and keywords', () => {
+    const router = new AgentRouter();
+    const defaultAgent = createMockAgent('software-engineer');
+    const desktopAgent = createMockAgent('desktop-operator');
+    const browserAgent = createMockAgent('browser-operator');
+    const terminalAgent = createMockAgent('terminal-operator');
+
+    router.register(defaultAgent, { isDefault: true });
+    router.register(desktopAgent);
+    router.register(browserAgent);
+    router.register(terminalAgent);
+
+    // Tagged description
+    expect(router.resolve(mockTask('[desktop] Open youtube')).name).toBe('desktop-operator');
+    expect(router.resolve(mockTask('#desktop Click button')).name).toBe('desktop-operator');
+
+    // Natural language keywords
+    expect(router.resolve(mockTask('Open a new tab in the active browser, navigate to youtube.com')).name).toBe('desktop-operator');
+    expect(router.resolve(mockTask('Click the chrome icon on the desktop screen')).name).toBe('desktop-operator');
+
+    // File context routing
+    expect(router.resolve(mockTask('Perform action', JSON.stringify({ agent: 'desktop-operator' }))).name).toBe('desktop-operator');
+    expect(router.resolve(mockTask('Perform action', JSON.stringify({ target: 'desktop' }))).name).toBe('desktop-operator');
+    expect(router.resolve(mockTask('Run command', JSON.stringify({ target: 'terminal' }))).name).toBe('terminal-operator');
+    expect(router.resolve(mockTask('Browse website', JSON.stringify({ target: 'browser' }))).name).toBe('browser-operator');
+  });
 });
