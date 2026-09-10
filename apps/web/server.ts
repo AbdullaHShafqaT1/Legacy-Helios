@@ -61,8 +61,48 @@ wss.on('connection', (ws: WebSocket) => {
   };
 
   ws.on('message', async (raw) => {
-    let msg: { type: string; text: string };
+    let msg: any;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+    if (msg.type === 'set_mode') {
+      const autonomous = Boolean(msg.autonomous);
+      logger.info({ autonomous }, 'Received set_mode request from client');
+
+      const dashboardPort = process.env.JARVIS_DASHBOARD_PORT ?? '3001';
+      try {
+        const postData = JSON.stringify({ autonomous });
+        const request = http.request({
+          hostname: '127.0.0.1',
+          port: parseInt(dashboardPort, 10),
+          path: '/api/autonomous-mode',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+          },
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => { data += chunk; });
+          res.on('end', () => {
+            logger.info({ statusCode: res.statusCode }, 'Autonomous mode forwarded to daemon');
+            send({ type: 'mode_ack', autonomous, success: res.statusCode === 200 });
+          });
+        });
+
+        request.on('error', (err) => {
+          logger.warn({ err: err.message }, 'Daemon not reachable on dashboardPort');
+          send({ type: 'mode_ack', autonomous, success: false, error: err.message });
+        });
+
+        request.write(postData);
+        request.end();
+      } catch (err: any) {
+        logger.error({ err }, 'Failed to dispatch mode update');
+        send({ type: 'mode_ack', autonomous, success: false, error: err.message });
+      }
+      return;
+    }
+
     if (msg.type !== 'message' || !msg.text?.trim()) return;
 
     const userText = msg.text.trim();

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import http from 'node:http';
 import { WebSocket } from 'ws';
@@ -14,6 +14,10 @@ describe('Phase 15 Local Status Dashboard tests', () => {
   let auditLog: AuditLog;
   const logger = createLogger('test', 'silent');
   const port = 8099; // Use custom test port to avoid collision
+  const mockGatekeeper = {
+    setAutonomousMode: vi.fn(),
+    isAutonomousMode: vi.fn().mockReturnValue(false),
+  };
 
   beforeAll(() => {
     db = new Database(':memory:');
@@ -119,7 +123,8 @@ describe('Phase 15 Local Status Dashboard tests', () => {
       },
       logger,
       db,
-      healthMonitor
+      healthMonitor,
+      gatekeeper: mockGatekeeper as any,
     });
 
     server.start();
@@ -344,5 +349,34 @@ describe('Phase 15 Local Status Dashboard tests', () => {
 
     const row = db.prepare('SELECT status FROM pending_approvals WHERE task_id = ?').get(taskId) as { status: string };
     expect(row.status).toBe('granted');
+  });
+
+  it('updates autonomous mode when POST /api/autonomous-mode is invoked', async () => {
+    const postData = JSON.stringify({ autonomous: true });
+    const autoPromise = new Promise<{ code: number, body: string }>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: port,
+        path: '/api/autonomous-mode',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk.toString());
+        res.on('end', () => resolve({ code: res.statusCode || 0, body }));
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    const result = await autoPromise;
+    expect(result.code).toBe(200);
+    expect(JSON.parse(result.body).success).toBe(true);
+    expect(JSON.parse(result.body).autonomous).toBe(true);
+    expect(mockGatekeeper.setAutonomousMode).toHaveBeenCalledWith(true);
   });
 });

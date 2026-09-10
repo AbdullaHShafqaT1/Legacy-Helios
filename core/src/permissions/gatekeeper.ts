@@ -46,6 +46,7 @@ export class PermissionGatekeeper {
   private approvalPrompt: ApprovalPrompt;
   private policyMap: PolicyMap;
   private highFrictionPrompt: ApprovalPrompt;
+  private autonomousMode = false;
 
   constructor(
     auditLog: AuditLog,
@@ -57,8 +58,62 @@ export class PermissionGatekeeper {
     this.auditLog = auditLog;
     this.logger = logger;
     this.approvalPrompt = approvalPrompt;
-    this.policyMap = policyMap;
+    this.policyMap = JSON.parse(JSON.stringify(policyMap));
     this.highFrictionPrompt = highFrictionPrompt || createHighFrictionApprovalPrompt();
+  }
+
+  /**
+   * Toggles autonomous override mode at runtime.
+   * When enabled, actions for desktop-operator and terminal-operator are auto-approved
+   * and bypass the pending_approvals queue.
+   */
+  setAutonomousMode(enabled: boolean): void {
+    this.autonomousMode = enabled;
+    if (enabled) {
+      if (this.policyMap['desktop-operator']) {
+        this.policyMap['desktop-operator'] = {
+          ...this.policyMap['desktop-operator'],
+          autoApproveActions: [...this.policyMap['desktop-operator'].allowedActions],
+        };
+      }
+      if (this.policyMap['terminal-operator']) {
+        this.policyMap['terminal-operator'] = {
+          ...this.policyMap['terminal-operator'],
+          autoApproveActions: [...this.policyMap['terminal-operator'].allowedActions],
+        };
+      }
+    } else {
+      if (this.policyMap['desktop-operator']) {
+        this.policyMap['desktop-operator'] = {
+          ...this.policyMap['desktop-operator'],
+          autoApproveActions: [...(DEFAULT_AGENT_POLICIES['desktop-operator'].autoApproveActions || [])],
+        };
+      }
+      if (this.policyMap['terminal-operator']) {
+        this.policyMap['terminal-operator'] = {
+          ...this.policyMap['terminal-operator'],
+          autoApproveActions: [...(DEFAULT_AGENT_POLICIES['terminal-operator'].autoApproveActions || [])],
+        };
+      }
+    }
+    this.logger.info({ autonomousMode: enabled }, 'Autonomous override mode updated at runtime.');
+  }
+
+  isAutonomousMode(): boolean {
+    return this.autonomousMode;
+  }
+
+  updatePolicy(actor: AgentRole, policyUpdate: Partial<AgentPolicy>): void {
+    if (!this.policyMap[actor]) {
+      this.policyMap[actor] = { allowedActions: [] };
+    }
+    if (policyUpdate.allowedActions) {
+      this.policyMap[actor].allowedActions = policyUpdate.allowedActions;
+    }
+    if (policyUpdate.autoApproveActions) {
+      this.policyMap[actor].autoApproveActions = policyUpdate.autoApproveActions;
+    }
+    this.logger.info({ actor, policyUpdate }, 'Policy updated at runtime.');
   }
 
   /**
@@ -121,10 +176,16 @@ export class PermissionGatekeeper {
     }
 
     // STEP 2: Approval check
-    // Step 2a: Policy Pre-approval (auto-approve non-destructive passive read actions)
+    // Step 2a: Policy Pre-approval (auto-approve non-destructive passive read actions or autonomous mode)
     let isAutoApproved = Boolean(
       policy.autoApproveActions && policy.autoApproveActions.includes(action as GuardedAction)
     );
+
+    if (this.autonomousMode && (request.actor === 'desktop-operator' || request.actor === 'terminal-operator')) {
+      if (policy.allowedActions.includes(action as GuardedAction)) {
+        isAutoApproved = true;
+      }
+    }
 
     // Terminal command allow-list pre-approval logic
     if (action === 'terminal-run') {

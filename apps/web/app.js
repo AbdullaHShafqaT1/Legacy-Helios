@@ -25,6 +25,9 @@ const micBtn        = document.getElementById('mic-btn');
 const clearBtn      = document.getElementById('clear-btn');
 const statusDot     = document.getElementById('status-dot');
 const statusLabel   = document.getElementById('status-label');
+const autonomousToggle = document.getElementById('autonomous-toggle');
+const toggleWrap    = document.querySelector('.autonomous-toggle-wrap');
+const toggleLabel   = document.getElementById('toggle-label');
 
 // ── State transitions ─────────────────────────────────────────
 const STATE_META = {
@@ -84,6 +87,16 @@ function connectWS() {
       appendMessage('jarvis', msg.text);
       setState(STATE.SPEAKING);
       speakText(msg.text);
+
+    } else if (msg.type === 'mode_ack') {
+      if (autonomousToggle) {
+        autonomousToggle.checked = Boolean(msg.autonomous);
+        if (toggleWrap) toggleWrap.classList.toggle('active', msg.autonomous);
+        if (toggleLabel) toggleLabel.textContent = msg.autonomous ? 'AUTO OVERRIDE [ON]' : 'AUTO OVERRIDE';
+      }
+      if (!msg.success && msg.error) {
+        appendMessage('error', `Core daemon mode sync error: ${msg.error}`);
+      }
 
     } else if (msg.type === 'error') {
       removeThinkingIndicator();
@@ -298,6 +311,26 @@ clearBtn.addEventListener('click', () => {
   conversation.innerHTML = '';
   appendMessage('system', 'Conversation cleared.');
 });
+
+if (autonomousToggle) {
+  autonomousToggle.addEventListener('change', (e) => {
+    const isAutonomous = e.target.checked;
+    if (toggleWrap) toggleWrap.classList.toggle('active', isAutonomous);
+    if (toggleLabel) toggleLabel.textContent = isAutonomous ? 'AUTO OVERRIDE [ON]' : 'AUTO OVERRIDE';
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'set_mode',
+        autonomous: isAutonomous,
+      }));
+    }
+
+    appendMessage(
+      'system',
+      `Autonomous Override ${isAutonomous ? 'ACTIVATED. Desktop & terminal operator actions will execute without pending approvals.' : 'DEACTIVATED. Standard supervision reinstated.'}`
+    );
+  });
+}
 
 // Load voices on Safari/Chrome (async)
 if (window.speechSynthesis) {

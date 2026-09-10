@@ -399,4 +399,83 @@ describe('PermissionGatekeeper Class', () => {
       expect(decisions[0].approval_status).toBe('denied');
     });
   });
+
+  describe('Runtime Policy & Autonomous Mode Tests', () => {
+    it('should toggle autonomous mode and auto-approve desktop-operator and terminal-operator actions', async () => {
+      const promptMock = vi.fn().mockResolvedValue(false); // prompt would deny
+      const gatekeeper = new PermissionGatekeeper(auditLog, logger, promptMock);
+
+      expect(gatekeeper.isAutonomousMode()).toBe(false);
+
+      // In default mode, desktop-mouse is not auto-approved and will prompt (mock returns false)
+      const desktopReq = {
+        actor: 'desktop-operator' as const,
+        action: 'desktop-mouse' as const,
+        params: { x: 100, y: 200 },
+      };
+
+      const defaultDecision = await gatekeeper.authorize(desktopReq);
+      expect(defaultDecision.granted).toBe(false);
+      expect(promptMock).toHaveBeenCalledTimes(1);
+
+      // Enable autonomous mode
+      gatekeeper.setAutonomousMode(true);
+      expect(gatekeeper.isAutonomousMode()).toBe(true);
+
+      promptMock.mockClear();
+
+      // Now desktop-mouse should be auto-approved via policy without calling the prompt
+      const autoDecision = await gatekeeper.authorize(desktopReq);
+      expect(autoDecision.granted).toBe(true);
+      expect(autoDecision.approver).toBe('policy');
+      expect(promptMock).not.toHaveBeenCalled();
+
+      // Terminal run should also be auto-approved
+      const terminalReq = {
+        actor: 'terminal-operator' as const,
+        action: 'terminal-run' as const,
+        params: { command: 'node -v' },
+      };
+      const termDecision = await gatekeeper.authorize(terminalReq);
+      expect(termDecision.granted).toBe(true);
+      expect(termDecision.approver).toBe('policy');
+      expect(promptMock).not.toHaveBeenCalled();
+
+      // Disable autonomous mode
+      gatekeeper.setAutonomousMode(false);
+      expect(gatekeeper.isAutonomousMode()).toBe(false);
+
+      const revertedDecision = await gatekeeper.authorize(desktopReq);
+      expect(revertedDecision.granted).toBe(false);
+      expect(promptMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should update agent policy dynamically at runtime using updatePolicy', async () => {
+      const promptMock = vi.fn().mockResolvedValue(false);
+      const gatekeeper = new PermissionGatekeeper(auditLog, logger, promptMock);
+
+      const customReq = {
+        actor: 'software-engineer' as const,
+        action: 'file-delete' as const,
+        params: { path: 'custom.txt' },
+      };
+
+      // Initially file-delete is not auto-approved
+      const decision1 = await gatekeeper.authorize(customReq);
+      expect(decision1.granted).toBe(false);
+      expect(promptMock).toHaveBeenCalledTimes(1);
+
+      // Dynamically add file-delete to autoApproveActions
+      gatekeeper.updatePolicy('software-engineer', {
+        autoApproveActions: ['file-read', 'memory-read', 'vision-read', 'file-delete'],
+      });
+
+      promptMock.mockClear();
+
+      const decision2 = await gatekeeper.authorize(customReq);
+      expect(decision2.granted).toBe(true);
+      expect(decision2.approver).toBe('policy');
+      expect(promptMock).not.toHaveBeenCalled();
+    });
+  });
 });

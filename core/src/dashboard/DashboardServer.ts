@@ -8,6 +8,7 @@ import { Config } from '../lib/config.js';
 import { HealthMonitor } from '../lib/health.js';
 import { PeriodicCaptureManager } from '../../../services/PeriodicCaptureManager.js';
 import { redactSecrets } from '../lib/redact.js';
+import { PermissionGatekeeper } from '../permissions/gatekeeper.js';
 
 export interface DashboardServerOptions {
   config: Config;
@@ -15,6 +16,7 @@ export interface DashboardServerOptions {
   db: Database.Database;
   healthMonitor: HealthMonitor;
   periodicCaptureManager?: PeriodicCaptureManager;
+  gatekeeper?: PermissionGatekeeper;
 }
 
 export class DashboardServer {
@@ -23,6 +25,7 @@ export class DashboardServer {
   private db: Database.Database;
   private healthMonitor: HealthMonitor;
   private periodicCaptureManager?: PeriodicCaptureManager;
+  private gatekeeper?: PermissionGatekeeper;
 
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
@@ -36,6 +39,7 @@ export class DashboardServer {
     this.db = options.db;
     this.healthMonitor = options.healthMonitor;
     this.periodicCaptureManager = options.periodicCaptureManager;
+    this.gatekeeper = options.gatekeeper;
   }
 
   /**
@@ -215,8 +219,38 @@ export class DashboardServer {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/api/autonomous-mode') {
+      this.handleAutonomousModeRequest(req, res);
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
+  }
+
+  private handleAutonomousModeRequest(req: IncomingMessage, res: ServerResponse): void {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const autonomous = Boolean(payload.autonomous);
+
+        if (this.gatekeeper) {
+          this.gatekeeper.setAutonomousMode(autonomous);
+        }
+
+        this.broadcastState();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, autonomous }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
   }
 
   private handleScreenshotRequest(res: ServerResponse): void {
@@ -386,7 +420,8 @@ export class DashboardServer {
       health,
       pending,
       auditLogs,
-      screenshotActive: Boolean(this.periodicCaptureManager?.isActive())
+      screenshotActive: Boolean(this.periodicCaptureManager?.isActive()),
+      autonomousMode: Boolean(this.gatekeeper?.isAutonomousMode()),
     };
   }
 
