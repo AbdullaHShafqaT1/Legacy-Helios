@@ -7,27 +7,27 @@ import { OllamaConnector } from '../../connectors/ollama/OllamaConnector.js';
 import pino from 'pino';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-const PORT     = parseInt(process.env.JARVIS_WEB_PORT      ?? '3000',              10);
-const MODEL    = process.env.JARVIS_OLLAMA_MODEL            ?? 'llava:latest';
-const BASE_URL = process.env.JARVIS_OLLAMA_BASE_URL         ?? 'http://localhost:11434';
+const PORT = parseInt(process.env.JARVIS_WEB_PORT ?? '3000', 10);
+const MODEL = process.env.JARVIS_OLLAMA_MODEL ?? 'llava:latest';
+const BASE_URL = process.env.JARVIS_OLLAMA_BASE_URL ?? 'http://localhost:11434';
 
 const logger = pino({ level: 'info' });
 
 const ollama = new OllamaConnector({
-  model:     MODEL,
-  baseUrl:   BASE_URL,
+  model: MODEL,
+  baseUrl: BASE_URL,
   maxRetries: 2,
   timeoutMs: 120_000,
-  logger:    pino({ level: 'warn' }),
+  logger: pino({ level: 'warn' }),
 });
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
-  '.css':  'text/css',
-  '.js':   'application/javascript',
-  '.ico':  'image/x-icon',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.ico': 'image/x-icon',
 };
 
 const SYSTEM_PROMPT =
@@ -39,8 +39,8 @@ const SYSTEM_PROMPT =
 const httpServer = http.createServer((req, res) => {
   const safePath = (req.url === '/' ? '/index.html' : req.url!).replace(/\.\./g, '');
   const filePath = path.join(__dirname, safePath);
-  const ext      = path.extname(filePath);
-  const mime     = MIME[ext] ?? 'text/plain';
+  const ext = path.extname(filePath);
+  const mime = MIME[ext] ?? 'text/plain';
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not Found'); return; }
@@ -68,7 +68,7 @@ wss.on('connection', (ws: WebSocket) => {
       const autonomous = Boolean(msg.autonomous);
       logger.info({ autonomous }, 'Received set_mode request from client');
 
-      const dashboardPort = process.env.JARVIS_DASHBOARD_PORT ?? '3001';
+      const dashboardPort = process.env.JARVIS_DASHBOARD_PORT ?? '8086';
       try {
         const postData = JSON.stringify({ autonomous });
         const request = http.request({
@@ -117,10 +117,10 @@ wss.on('connection', (ws: WebSocket) => {
 
     try {
       const result = await ollama.invoke({ description: prompt });
-      const reply  = result.text.trim();
+      const reply = result.text.trim();
 
-      history.push({ role: 'user',      content: userText });
-      history.push({ role: 'assistant', content: reply    });
+      history.push({ role: 'user', content: userText });
+      history.push({ role: 'assistant', content: reply });
 
       send({ type: 'reply', text: reply });
     } catch (err: any) {
