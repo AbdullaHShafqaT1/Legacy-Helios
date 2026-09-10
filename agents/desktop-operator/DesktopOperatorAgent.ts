@@ -43,8 +43,12 @@ export class DesktopOperatorAgent implements Agent {
       const response = await this.modelRouter.route('reasoning', {
         description: `Desktop operator received task: ${input.description}. 
 Parse out what desktop actions to execute. Return JSON with format:
-{"actions": [{"action": "click", "x": 100, "y": 200}, {"action": "type", "text": "hello"}, {"action": "hotkey", "keys": "ctrl+w"}, {"action": "cloudcode_oversight", "url": "...", "workspace": "..."}]}
-Supported actions: move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, cloudcode_oversight.`,
+{"actions": [{"action": "hotkey", "keys": "ctrl+t"}, {"action": "type", "text": "youtube.com"}, {"action": "press", "key": "enter"}]}
+Supported actions: move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, cloudcode_oversight.
+Rules:
+- To open a new tab in active browser, use {"action": "hotkey", "keys": "ctrl+t"}.
+- To navigate or search, use {"action": "type", "text": "..."} followed by {"action": "press", "key": "enter"}.
+- Only use supported actions.`,
         fileContext: input.fileContext,
       });
 
@@ -76,6 +80,13 @@ Supported actions: move, click, doubleclick, rightclick, drag, scroll, type, pre
 
       const role = this.name as AgentRole;
 
+      // Re-capture screen observation right before executing actions so coordinate validations have fresh observation context
+      try {
+        await this.desktopConnector.captureScreen(role);
+      } catch {
+        // Soft fail if screen capture is not fully initialized
+      }
+
       for (const action of actions) {
         let result: DesktopActionResult;
         
@@ -106,6 +117,23 @@ Supported actions: move, click, doubleclick, rightclick, drag, scroll, type, pre
             break;
           case 'hotkey':
             result = await this.desktopConnector.hotkey(role, action.keys);
+            break;
+          case 'open_tab':
+          case 'new_tab':
+            result = await this.desktopConnector.hotkey(role, 'ctrl+t');
+            break;
+          case 'navigate':
+            if (action.url) {
+              result = await this.desktopConnector.typeText(role, action.url);
+              if (result.status === 'SUCCESS') {
+                result = await this.desktopConnector.pressKey(role, 'enter');
+              }
+            } else {
+              result = { status: 'SUCCESS', message: 'No URL provided' };
+            }
+            break;
+          case 'open_browser':
+            result = await this.desktopConnector.hotkey(role, 'win');
             break;
           case 'cloudcode_oversight':
             result = await this.desktopConnector.cloudcodeOversight(role, action.url || '', action.workspace || '');
