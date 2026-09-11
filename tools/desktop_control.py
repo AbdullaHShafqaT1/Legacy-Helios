@@ -1,8 +1,19 @@
 import sys
+import os
 import json
 import time
 import pyautogui
 import pygetwindow as gw
+
+# Import native Win32 DPI-aware OS mouse controller
+try:
+    import os_mouse_controller as os_mouse
+except ImportError:
+    try:
+        from tools import os_mouse_controller as os_mouse
+    except ImportError:
+        sys.path.append(os.path.dirname(__file__))
+        import os_mouse_controller as os_mouse
 
 # Setup PyAutoGUI settings (rely on Jarvis OS native emergency-stop & override hooks instead of screen corner fail-safe)
 pyautogui.FAILSAFE = False
@@ -224,10 +235,9 @@ def main():
 
         elif action == 'move':
             x, y = payload['x'], payload['y']
-            duration = payload.get('duration', 0.8)
-            pyautogui.moveTo(x, y, duration=duration)
-            time.sleep(0.05)
-            ensure_cursor_position(x, y)
+            duration = payload.get('duration', 0.15)
+            smooth = payload.get('smooth', True)
+            os_mouse.move_to(x, y, smooth=smooth, duration=duration)
             if payload.get('screenshot_path'):
                 pyautogui.screenshot(payload['screenshot_path'])
             
@@ -235,46 +245,42 @@ def main():
             x, y = payload.get('x'), payload.get('y')
             clicks = payload.get('clicks', 1)
             button = payload.get('button', 'left')
-            duration = payload.get('duration', 0.8)
-            dwell_time = payload.get('dwell_time', 0.05)
-            if payload.get('dwell_ms'):
-                dwell_time = payload['dwell_ms'] / 1000.0
+            duration = payload.get('duration', 0.15)
+            dwell_ms = payload.get('dwell_ms', 50)
+            if payload.get('dwell_time'):
+                dwell_ms = payload['dwell_time'] * 1000.0
 
-            # Interim screenshot before click if requested
             if payload.get('interim_screenshot_path'):
                 if x is not None and y is not None:
-                    pyautogui.moveTo(x, y, duration=duration)
-                    time.sleep(0.05)
-                    ensure_cursor_position(x, y)
+                    os_mouse.move_to(x, y, smooth=True, duration=duration)
                 pyautogui.screenshot(payload['interim_screenshot_path'])
 
-            reliable_click(x=x, y=y, button=button, clicks=clicks, dwell_time=dwell_time, duration=duration)
+            os_mouse.click(x=x, y=y, button=button, count=clicks, dwell_ms=dwell_ms)
                 
         elif action == 'doubleclick':
             x, y = payload.get('x'), payload.get('y')
-            duration = payload.get('duration', 0.8)
-            dwell_time = payload.get('dwell_time', 0.05)
-            if payload.get('dwell_ms'):
-                dwell_time = payload['dwell_ms'] / 1000.0
-            reliable_click(x=x, y=y, button='left', clicks=2, dwell_time=dwell_time, duration=duration)
+            dwell_ms = payload.get('dwell_ms', 50)
+            if payload.get('dwell_time'):
+                dwell_ms = payload['dwell_time'] * 1000.0
+            os_mouse.click(x=x, y=y, button='left', count=2, dwell_ms=dwell_ms)
                 
         elif action == 'rightclick':
             x, y = payload.get('x'), payload.get('y')
-            duration = payload.get('duration', 0.8)
-            dwell_time = payload.get('dwell_time', 0.05)
-            if payload.get('dwell_ms'):
-                dwell_time = payload['dwell_ms'] / 1000.0
-            reliable_click(x=x, y=y, button='right', clicks=1, dwell_time=dwell_time, duration=duration)
+            dwell_ms = payload.get('dwell_ms', 50)
+            if payload.get('dwell_time'):
+                dwell_ms = payload['dwell_time'] * 1000.0
+            os_mouse.click(x=x, y=y, button='right', count=1, dwell_ms=dwell_ms)
                 
         elif action == 'drag':
             x, y = payload['x'], payload['y']
-            duration = payload.get('duration', 1.0)
-            button = payload.get('button', 'left')
-            pyautogui.dragTo(x, y, duration=duration, button=button)
+            x0, y0 = os_mouse.get_cursor_pos()
+            duration = payload.get('duration', 0.2)
+            os_mouse.drag_and_drop(x0, y0, x, y, smooth=True, duration=duration)
             
         elif action == 'scroll':
             amount = payload['amount']
-            pyautogui.scroll(amount)
+            direction = 'up' if amount > 0 else 'down'
+            os_mouse.scroll(direction=direction, amount=abs(amount))
             
         elif action == 'type':
             text = payload['text']

@@ -34,7 +34,8 @@ export class GeminiConnector implements ModelRoute {
       throw new GeminiConnectorError('API key must be provided.');
     }
     this.apiKey = options.apiKey.trim();
-    this.model = options.model ?? 'gemini-1.5-flash';
+    const initialModel = options.model ?? 'gemini-2.5-flash';
+    this.model = initialModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : initialModel;
     this.maxRetries = options.maxRetries ?? 3;
     this.timeoutMs = options.timeoutMs ?? 60000;
     this.logger = options.logger;
@@ -51,7 +52,8 @@ export class GeminiConnector implements ModelRoute {
 
   setModel(model: string): void {
     if (model && model.trim()) {
-      this.model = model.trim();
+      const trimmed = model.trim();
+      this.model = trimmed === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : trimmed;
     }
   }
 
@@ -60,23 +62,44 @@ export class GeminiConnector implements ModelRoute {
   }
 
   /**
-   * Validates an API key against the Google Generative AI client.
-   * Performs a lightweight token count or check to confirm authorization.
+   * Validates an API key against Google's Generative Language API.
+   * Directly queries the models list endpoint to confirm key validity independent of specific model tags.
    */
-  static async validateApiKey(apiKey: string, model = 'gemini-1.5-flash'): Promise<{ valid: boolean; error?: string }> {
+  static async validateApiKey(apiKey: string, model = 'gemini-2.5-flash'): Promise<{ valid: boolean; error?: string }> {
     if (!apiKey || !apiKey.trim()) {
       return { valid: false, error: 'API key cannot be empty.' };
     }
 
+    const key = apiKey.trim();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const client = new GoogleGenerativeAI(apiKey.trim());
-      const genModel = client.getGenerativeModel({ model });
-      // Lightweight call to test credentials
-      await genModel.countTokens('validation test');
-      return { valid: true };
-    } catch (err: any) {
-      const message = err?.message || 'Invalid API key or network error.';
+      // 1. Direct models list check via Google Generative Language REST API
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        return { valid: true };
+      }
+
+      const errData = (await res.json().catch(() => null)) as any;
+      const message = errData?.error?.message || `Validation failed with status ${res.status}`;
       return { valid: false, error: message };
+    } catch (netErr: any) {
+      clearTimeout(timer);
+      // 2. Fallback to SDK getGenerativeModel token count if fetch was aborted/failed
+      try {
+        const normalizedModel = model === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : model;
+        const client = new GoogleGenerativeAI(key);
+        const genModel = client.getGenerativeModel({ model: normalizedModel });
+        await genModel.countTokens('validation test');
+        return { valid: true };
+      } catch (sdkErr: any) {
+        const message = sdkErr?.message || netErr?.message || 'Invalid API key or network error.';
+        return { valid: false, error: message };
+      }
     }
   }
 

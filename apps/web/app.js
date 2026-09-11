@@ -61,6 +61,7 @@ function getStoredModelConfig() {
     ollamaModel: 'llava:latest',
     lmstudioModel: 'local-model',
     apiKey: '',
+    apiModel: 'gemini-2.5-flash',
     customUrl: 'http://localhost:8000/v1',
   };
 }
@@ -106,6 +107,9 @@ function connectWS() {
     statusLabel.className   = 'status-label online';
     setState(STATE.IDLE);
     stateSublabel.textContent = 'Jarvis online. Click anywhere to activate voice control.';
+
+    // Push client's stored/selected runtime provider config to server immediately on connect
+    dispatchProviderChange();
   });
 
   ws.addEventListener('close', () => {
@@ -145,10 +149,15 @@ function connectWS() {
     } else if (msg.type === 'provider_ack') {
       if (msg.provider) {
         providerConfig.provider = msg.provider;
+        if (providerSelect && providerSelect.value !== msg.provider) {
+          providerSelect.value = msg.provider;
+        }
         if (msg.model) {
           if (msg.provider === 'ollama') providerConfig.ollamaModel = msg.model;
           if (msg.provider === 'lmstudio') providerConfig.lmstudioModel = msg.model;
+          if (msg.provider === 'api_key') providerConfig.apiModel = msg.model;
         }
+        updateSecondaryVisibility(msg.provider);
         updateActiveModelBadge();
       }
 
@@ -422,9 +431,9 @@ function updateActiveModelBadge() {
   if (p === 'ollama') {
     modelNameDisplay.textContent = providerConfig.ollamaModel || 'llava:latest';
   } else if (p === 'lmstudio') {
-    modelNameDisplay.textContent = providerConfig.lmstudioModel || 'LM Studio';
+    modelNameDisplay.textContent = providerConfig.lmstudioModel || 'local-model';
   } else if (p === 'api_key') {
-    modelNameDisplay.textContent = 'Gemini 1.5';
+    modelNameDisplay.textContent = providerConfig.apiModel || 'gemini-2.5-flash';
   } else if (p === 'custom_url') {
     try {
       const url = new URL(providerConfig.customUrl || 'http://localhost:8000');
@@ -518,7 +527,7 @@ async function dispatchProviderChange() {
   let targetModel = '';
   if (providerConfig.provider === 'ollama') targetModel = providerConfig.ollamaModel || 'llava:latest';
   else if (providerConfig.provider === 'lmstudio') targetModel = providerConfig.lmstudioModel || 'local-model';
-  else if (providerConfig.provider === 'api_key') targetModel = 'gemini-1.5-flash';
+  else if (providerConfig.provider === 'api_key') targetModel = 'gemini-2.5-flash';
   else if (providerConfig.provider === 'custom_url') targetModel = 'custom-model';
 
   const payload = {

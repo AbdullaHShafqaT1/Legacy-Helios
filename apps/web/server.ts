@@ -77,7 +77,7 @@ function switchProvider(payload: {
   } else if (activeProvider === 'api_key' || activeProvider === 'gemini') {
     activeConnector = new GeminiConnector({
       apiKey: activeApiKey,
-      model: activeModel || 'gemini-1.5-flash',
+      model: activeModel || 'gemini-2.5-flash',
       maxRetries: 2,
       timeoutMs: 60_000,
       logger: pino({ level: 'warn' }),
@@ -119,9 +119,14 @@ const MIME: Record<string, string> = {
 };
 
 const SYSTEM_PROMPT =
-  'You are Jarvis, an advanced AI assistant with a calm, intelligent tone. ' +
-  'Keep spoken responses concise — 2-3 sentences maximum. ' +
-  'For text responses you may be more detailed when appropriate.';
+  'You are Jarvis, an advanced AI assistant with a calm, intelligent tone.\n' +
+  'Keep spoken responses concise — 2-3 sentences maximum. For text responses you may be more detailed when appropriate.\n\n' +
+  'Desktop & Cursor Automation Capabilities:\n' +
+  'You have full access to a native OS-level, Per-Monitor DPI-aware mouse control execution engine and desktop automation layer:\n' +
+  '- Native Cursor Primitives: You can move the cursor (instantaneous or smooth trajectory via cubic ease-out), fire physical single/double/right clicks with hardware dwell time, execute drag-and-drop actions, and scroll.\n' +
+  '- Hardware DPI Awareness: The execution engine runs Per-Monitor DPI Aware v2, eliminating coordinate drift across display scalings (100%, 125%, 150%, 200%).\n' +
+  '- Coordinate Resolution: Coordinates can be specified in physical screen pixels (X, Y) or normalized coordinates [0, 1000] / [0.0, 1.0], or bounding boxes [ymin, xmin, ymax, xmax], which automatically target the geometric center.\n' +
+  '- Action Routing: Any requests to interact with the desktop, click elements, open apps, or control the cursor are delegated to the desktop-operator agent with safety gatekeeping and execution verification.';
 
 // ─── HTTP server with API endpoints and static file serving ───────────────────
 const httpServer = http.createServer((req, res) => {
@@ -386,7 +391,7 @@ wss.on('connection', async (ws: WebSocket) => {
     const hasDesktopKeywords = /(open|new)\s+tab|active\s+browser|youtube|desktop|screen|click|type|scroll|mouse|hotkey|browser/i.test(userText);
     const isActionVerb = /^(open|navigate|go to|search|click|type|press|run|create|write|start|launch|close|find|play)\b/i.test(userText);
 
-    const isActionable = Boolean(cliCtx) && (isExplicitlyTagged || isAutonomousMode || hasDesktopKeywords || isActionVerb);
+    const isActionable = Boolean(cliCtx) && (isExplicitlyTagged || hasDesktopKeywords || isActionVerb);
 
     if (!isActionable) {
       // Standard Conversational Completion using dynamically active connector
@@ -421,7 +426,7 @@ wss.on('connection', async (ws: WebSocket) => {
     if (isExplicitlyTagged) {
       const match = userText.match(/^[#\[]([a-zA-Z0-9_-]+)[\]]?/);
       if (match) targetAgent = match[1];
-    } else if (hasDesktopKeywords || isAutonomousMode) {
+    } else if (hasDesktopKeywords) {
       targetAgent = 'desktop-operator';
     }
 

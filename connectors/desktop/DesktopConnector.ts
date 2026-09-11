@@ -24,6 +24,16 @@ export interface DesktopActionResult {
   screenshotPathBefore?: string;
   screenshotPathAfter?: string;
   error?: string;
+  executedAt?: [number, number];
+  timestamp?: string;
+  displayInfo?: {
+    width?: number;
+    height?: number;
+    dpi?: number;
+    scalePercent?: number;
+    [key: string]: any;
+  };
+  details?: Record<string, any>;
 }
 
 export class DesktopConnector {
@@ -55,7 +65,22 @@ export class DesktopConnector {
   private async validateSafety(
     actor: AgentRole,
     action: 'desktop-mouse' | 'desktop-keyboard',
-    params: { x?: number; y?: number; text?: string; key?: string; display?: number }
+    params: {
+      x?: number;
+      y?: number;
+      start_x?: number;
+      start_y?: number;
+      end_x?: number;
+      end_y?: number;
+      x1?: number;
+      y1?: number;
+      x2?: number;
+      y2?: number;
+      text?: string;
+      key?: string;
+      display?: number;
+      [key: string]: any;
+    }
   ): Promise<{ granted: boolean; error?: string; correlationId: string }> {
     const config = loadConfig(false);
 
@@ -86,28 +111,46 @@ export class DesktopConnector {
     }
 
     // 3. Coordinate bounds checks
-    if (action === 'desktop-mouse' && params.x !== undefined && params.y !== undefined) {
-      const x = params.x;
-      const y = params.y;
-
-      if (x < 0 || y < 0) {
-        return { granted: false, error: `Invalid coordinates: Negative dimensions are rejected (X: ${x}, Y: ${y}).`, correlationId: 'n-a' };
+    if (action === 'desktop-mouse') {
+      const coordsToCheck: Array<{ x: number; y: number; label: string }> = [];
+      if (params.x !== undefined && params.y !== undefined) {
+        coordsToCheck.push({ x: params.x, y: params.y, label: `(${params.x}, ${params.y})` });
+      }
+      const sx = params.start_x ?? params.x1;
+      const sy = params.start_y ?? params.y1;
+      if (sx !== undefined && sy !== undefined && (sx !== params.x || sy !== params.y)) {
+        coordsToCheck.push({ x: sx, y: sy, label: `(${sx}, ${sy})` });
+      }
+      const ex = params.end_x ?? params.x2;
+      const ey = params.end_y ?? params.y2;
+      if (ex !== undefined && ey !== undefined) {
+        coordsToCheck.push({ x: ex, y: ey, label: `(${ex}, ${ey})` });
       }
 
-      // Freshness check: latest observation timestamp must be recent
-      const lastObs = this.visionConnector.lastObservation;
-      if (!lastObs || !lastObs.timestamp) {
-        return { granted: false, error: 'Rejection: No desktop screenshot has been captured yet. Cannot target coordinates without observation context.', correlationId: 'n-a' };
+      for (const pt of coordsToCheck) {
+        if (pt.x < 0 || pt.y < 0) {
+          return { granted: false, error: `Invalid coordinates: Negative dimensions are rejected (X: ${pt.x}, Y: ${pt.y}).`, correlationId: 'n-a' };
+        }
       }
 
-      const elapsed = Date.now() - new Date(lastObs.timestamp).getTime();
-      if (elapsed > config.desktopObservationMaxAgeMs) {
-        return { granted: false, error: `Coordinate safety rejection: Screen observation is stale (${(elapsed / 1000).toFixed(1)}s old, limit is ${config.desktopObservationMaxAgeMs / 1000}s). Capture a fresh screenshot.`, correlationId: 'n-a' };
-      }
+      if (coordsToCheck.length > 0) {
+        // Freshness check: latest observation timestamp must be recent
+        const lastObs = this.visionConnector.lastObservation;
+        if (!lastObs || !lastObs.timestamp) {
+          return { granted: false, error: 'Rejection: No desktop screenshot has been captured yet. Cannot target coordinates without observation context.', correlationId: 'n-a' };
+        }
 
-      // Check bounds against display resolution
-      if (x >= lastObs.width || y >= lastObs.height) {
-        return { granted: false, error: `Coordinate safety rejection: Coordinates (${x}, ${y}) are out of display bounds (${lastObs.width}x${lastObs.height}).`, correlationId: 'n-a' };
+        const elapsed = Date.now() - new Date(lastObs.timestamp).getTime();
+        if (elapsed > config.desktopObservationMaxAgeMs) {
+          return { granted: false, error: `Coordinate safety rejection: Screen observation is stale (${(elapsed / 1000).toFixed(1)}s old, limit is ${config.desktopObservationMaxAgeMs / 1000}s). Capture a fresh screenshot.`, correlationId: 'n-a' };
+        }
+
+        // Check bounds against display resolution
+        for (const pt of coordsToCheck) {
+          if (pt.x >= lastObs.width || pt.y >= lastObs.height) {
+            return { granted: false, error: `Coordinate safety rejection: Coordinates (${pt.x}, ${pt.y}) are out of display bounds (${lastObs.width}x${lastObs.height}).`, correlationId: 'n-a' };
+          }
+        }
       }
     }
 
@@ -138,11 +181,21 @@ export class DesktopConnector {
     return { granted: true, correlationId: authorization.correlationId };
   }
 
-  private async executeScript(payload: any): Promise<void> {
+  private async executeScript(payload: any): Promise<{
+    status?: string;
+    executedAt?: [number, number];
+    timestamp?: string;
+    displayInfo?: any;
+    details?: any;
+  } | void> {
     const config = loadConfig(false);
-    const scriptPath = path.resolve(config.projectRoot, 'tools/desktop_control.py');
+    const isMouseAction = payload.action?.startsWith('mouse_') ||
+      ['move', 'click', 'doubleclick', 'rightclick', 'drag', 'scroll', 'display_info'].includes(payload.action);
+    const scriptPath = isMouseAction
+      ? path.resolve(config.projectRoot, 'tools/os_mouse_controller.py')
+      : path.resolve(config.projectRoot, 'tools/desktop_control.py');
 
-    await new Promise<void>((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const ps = spawn('python', [
         scriptPath,
         JSON.stringify(payload)
@@ -165,7 +218,18 @@ export class DesktopConnector {
       ps.on('close', (code) => {
         clearTimeout(timeout);
         if (code === 0) {
-          resolve();
+          try {
+            const parsed = JSON.parse(stdout.trim());
+            resolve({
+              status: parsed.status,
+              executedAt: parsed.executed_at ?? parsed.cursor,
+              timestamp: parsed.timestamp,
+              displayInfo: parsed.display,
+              details: parsed,
+            });
+          } catch {
+            resolve();
+          }
         } else {
           const detail = stderr.trim() || stdout.trim() || 'No error details provided';
           reject(new Error(`Desktop script failed with code ${code}. Detail: ${detail}`));
@@ -176,6 +240,71 @@ export class DesktopConnector {
         clearTimeout(timeout);
         reject(err);
       });
+    });
+  }
+
+  // Single-purpose mouse tools
+  async mouseClick(
+    actor: AgentRole,
+    x: number,
+    y: number,
+    clickType: 'single' | 'double' | 'right' = 'single'
+  ): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', {
+      action: 'mouse_click',
+      x,
+      y,
+      click_type: clickType,
+    });
+  }
+
+  async mouseMove(
+    actor: AgentRole,
+    x: number,
+    y: number,
+    smooth: boolean = false
+  ): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', {
+      action: 'mouse_move',
+      x,
+      y,
+      smooth,
+    });
+  }
+
+  async mouseDrag(
+    actor: AgentRole,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
+  ): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', {
+      action: 'mouse_drag',
+      start_x: startX,
+      start_y: startY,
+      end_x: endX,
+      end_y: endY,
+      x: startX,
+      y: startY,
+    });
+  }
+
+  async mouseScroll(
+    actor: AgentRole,
+    direction: 'up' | 'down',
+    amount: number = 3
+  ): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', {
+      action: 'mouse_scroll',
+      direction,
+      amount,
+    });
+  }
+
+  async getDisplayInfo(actor: AgentRole): Promise<DesktopActionResult> {
+    return this.runAction(actor, 'desktop-mouse', {
+      action: 'display_info',
     });
   }
 
@@ -255,7 +384,7 @@ export class DesktopConnector {
     }
 
     try {
-      await this.executeScript(params);
+      const scriptResult = (await this.executeScript(params)) as any;
 
       let screenshotPathAfter: string | undefined;
       try {
@@ -272,11 +401,19 @@ export class DesktopConnector {
         `success — executed desktop command [${params.action}]`
       );
 
+      const executedPos: [number, number] | undefined =
+        scriptResult?.executedAt ??
+        (params.x !== undefined && params.y !== undefined ? [params.x, params.y] : undefined);
+
       return {
         status: 'SUCCESS',
         message: `Successfully executed desktop action: ${params.action}`,
         screenshotPathBefore,
         screenshotPathAfter,
+        executedAt: executedPos,
+        timestamp: scriptResult?.timestamp || new Date().toISOString(),
+        displayInfo: scriptResult?.displayInfo,
+        details: scriptResult?.details,
       };
     } catch (err: any) {
       this.auditLog.recordOutcome(

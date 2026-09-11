@@ -19,6 +19,7 @@ import { EmbeddingPipeline } from './memory/embeddingPipeline.js';
 import { MemoryManager } from './memory/memoryManager.js';
 import { TrayManager } from '../../services/TrayManager.js';
 import { ClaudeConnector } from '../../connectors/claude-api/ClaudeConnector.js';
+import { GeminiConnector } from '../../connectors/gemini/GeminiConnector.js';
 import { PeriodicCaptureManager } from '../../services/PeriodicCaptureManager.js';
 import { SearchConnector } from '../../connectors/search/SearchConnector.js';
 import { KanbanConnector } from '../../connectors/kanban/KanbanConnector.js';
@@ -145,6 +146,22 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
       logger: createLogger('claude-connector', config.logLevel),
     });
     modelRouter.register(claudeConnector);
+  }
+
+  const geminiKey = config.geminiApiKey || process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const geminiConnector = new GeminiConnector({
+      apiKey: geminiKey,
+      model: 'gemini-2.5-flash',
+      maxRetries: config.maxRetries,
+      timeoutMs: config.claudeTimeoutMs,
+      logger: createLogger('gemini-connector', config.logLevel),
+    });
+    modelRouter.register(geminiConnector);
+  }
+
+  if (config.activeModelProvider) {
+    modelRouter.setActiveProvider(config.activeModelProvider);
   }
 
   const vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));

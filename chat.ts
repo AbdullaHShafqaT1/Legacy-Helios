@@ -26,7 +26,8 @@ const ollama = new OllamaConnector({
 const history: { role: 'user' | 'assistant'; content: string }[] = [];
 
 const SYSTEM_PROMPT =
-  'You are Jarvis, an intelligent AI assistant running locally. Be concise, helpful, and direct.';
+  'You are Jarvis, an intelligent AI assistant running locally. Be concise, helpful, and direct.\n' +
+  'You have native OS-level mouse and desktop automation capabilities (DPI-aware cursor positioning, clicks, drag-and-drop, scrolling, and visual targeting).';
 
 function buildPrompt(userMessage: string): string {
   // Prepend system prompt + history to give the model context

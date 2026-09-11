@@ -7,6 +7,7 @@ import { MessageRouter } from '../../core/src/router/messageRouter.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { AgentRole } from '../../core/src/permissions/policy.js';
+import { CoordinateResolutionService } from '../../core/src/vision/CoordinateResolutionService.js';
 
 export class DesktopOperatorAgent implements Agent {
   readonly name = 'desktop-operator';
@@ -15,19 +16,22 @@ export class DesktopOperatorAgent implements Agent {
   private readonly memoryManager: MemoryManager;
   private readonly logger: Logger;
   private readonly messageRouter?: MessageRouter;
+  private readonly coordinateService: CoordinateResolutionService;
 
   constructor(
     modelRouter: ModelRouter,
     desktopConnector: DesktopConnector,
     memoryManager: MemoryManager,
     logger: Logger,
-    messageRouter?: MessageRouter
+    messageRouter?: MessageRouter,
+    coordinateService?: CoordinateResolutionService
   ) {
     this.modelRouter = modelRouter;
     this.desktopConnector = desktopConnector;
     this.memoryManager = memoryManager;
     this.logger = logger;
     this.messageRouter = messageRouter;
+    this.coordinateService = coordinateService || new CoordinateResolutionService();
   }
 
   async process(input: AgentTaskInput): Promise<AgentResult> {
@@ -43,16 +47,30 @@ export class DesktopOperatorAgent implements Agent {
 
       const response = await this.modelRouter.route('reasoning', {
         description: `Desktop operator received task: ${input.description}. 
-Parse out what desktop actions to execute. Return JSON with format:
-{"actions": [{"action": "focus_window", "target": "chrome"}, {"action": "hotkey", "keys": "ctrl+t"}, {"action": "type", "text": "youtube.com"}, {"action": "press", "key": "enter"}, {"action": "wait", "seconds": 3}, {"action": "click_visual", "target": "first recommended video thumbnail"}]}
-Supported actions: focus_window, wait, click_visual, move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, open_tab, navigate, cloudcode_oversight.
+Parse out what desktop actions to execute based strictly on the user's task. Return JSON with format:
+{"actions": [{"action": "supported_action_name", "...parameter_key": "...parameter_value"}]}
+
+Execution Engine & Mouse Control Context:
+You are backed by a dedicated OS-level Win32 cursor controller with Per-Monitor DPI Aware v2 support and an automatic coordinate resolution service.
+- Supported coordinate spaces: You can supply absolute screen pixels (e.g. 1920x1080 or 2560x1440), normalized coordinates [0, 1000] or [0.0, 1.0], or bounding boxes [ymin, xmin, ymax, xmax] (which automatically target the geometric center).
+- DPI drift elimination: Hardware scaling (100%, 125%, 150%, 200%) is resolved natively with zero offset drift.
+- Cursor trajectory: "smooth": true applies cubic ease-out interpolation; "smooth": false jumps instantaneously.
+- Click reliability: Clicks use physical mouse down/up dwell time to guarantee register on UI buttons.
+
+Supported actions: mouse_click, mouse_move, mouse_drag, mouse_scroll, focus_window, wait, click_visual, move, click, doubleclick, rightclick, drag, scroll, type, press, hotkey, open_tab, navigate, cloudcode_oversight.
+Mouse actions:
+- mouse_click: {"action": "mouse_click", "x": number, "y": number, "click_type": "single" | "double" | "right"}
+- mouse_move: {"action": "mouse_move", "x": number, "y": number, "smooth": boolean}
+- mouse_drag: {"action": "mouse_drag", "start_x": number, "start_y": number, "end_x": number, "end_y": number}
+- mouse_scroll: {"action": "mouse_scroll", "direction": "up" | "down", "amount": number}
 Rules:
-- When interacting with a browser, focus it first: {"action": "focus_window", "target": "chrome"}.
+- When interacting with an application or browser window, focus it first: {"action": "focus_window", "target": "<window_name>"}.
 - To open a new tab in active browser, use {"action": "hotkey", "keys": "ctrl+t"}.
-- To navigate or search, use {"action": "type", "text": "..."} followed by {"action": "press", "key": "enter"}.
-- After navigating to a page, add a delay to allow the DOM/thumbnails to render: {"action": "wait", "seconds": 3}.
-- To visually locate and click an item on the screen (such as the first recommended video), use: {"action": "click_visual", "target": "first recommended video thumbnail"}.
-- Only use supported actions.`,
+- To navigate or search, use {"action": "type", "text": "<url_or_text>"} followed by {"action": "press", "key": "enter"}.
+- After navigating to a page, add a delay to allow the DOM/content to render: {"action": "wait", "seconds": 3}.
+- To visually locate and click an item on the screen, use: {"action": "click_visual", "target": "<visual_target_description>"}.
+- If the task does not request any desktop action (e.g. conversational greeting or query), return {"actions": []}.
+- Only use supported actions. Never invent tasks or navigate to websites not requested by the user.`,
         fileContext: input.fileContext,
       });
 
@@ -118,6 +136,56 @@ Rules:
         let result: DesktopActionResult;
         
         switch (action.action) {
+          case 'mouse_click': {
+            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const w = obs?.width || 2560;
+            const h = obs?.height || 1440;
+            const coords = this.coordinateService.resolve(action, w, h);
+            const clickType = action.click_type || (action.clicks === 2 ? 'double' : (action.button === 'right' ? 'right' : 'single'));
+            result = await (this.desktopConnector.mouseClick
+              ? this.desktopConnector.mouseClick(role, coords.x, coords.y, clickType)
+              : this.desktopConnector.click(role, coords.x, coords.y));
+            break;
+          }
+          case 'mouse_move': {
+            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const w = obs?.width || 2560;
+            const h = obs?.height || 1440;
+            const coords = this.coordinateService.resolve(action, w, h);
+            result = await (this.desktopConnector.mouseMove
+              ? this.desktopConnector.mouseMove(role, coords.x, coords.y, action.smooth ?? false)
+              : this.desktopConnector.moveMouse(role, coords.x, coords.y));
+            break;
+          }
+          case 'mouse_drag': {
+            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const w = obs?.width || 2560;
+            const h = obs?.height || 1440;
+            const start = this.coordinateService.resolvePoint(
+              action.start_x ?? action.x1 ?? action.x ?? 0,
+              action.start_y ?? action.y1 ?? action.y ?? 0,
+              w,
+              h
+            );
+            const end = this.coordinateService.resolvePoint(
+              action.end_x ?? action.x2 ?? action.to_x ?? 0,
+              action.end_y ?? action.y2 ?? action.to_y ?? 0,
+              w,
+              h
+            );
+            result = await (this.desktopConnector.mouseDrag
+              ? this.desktopConnector.mouseDrag(role, start.x, start.y, end.x, end.y)
+              : this.desktopConnector.dragMouse(role, end.x, end.y));
+            break;
+          }
+          case 'mouse_scroll': {
+            const direction = action.direction || (action.amount && action.amount < 0 ? 'down' : 'up');
+            const amount = Math.abs(action.amount || 3);
+            result = await (this.desktopConnector.mouseScroll
+              ? this.desktopConnector.mouseScroll(role, direction, amount)
+              : this.desktopConnector.scroll(role, direction === 'down' ? -amount : amount));
+            break;
+          }
           case 'focus_window':
           case 'focus_browser':
             result = await this.desktopConnector.focusWindow(role, action.target || action.target_window || 'chrome');
@@ -195,6 +263,16 @@ Rules:
             throw new Error(`Unknown desktop action type: ${action.action}`);
         }
 
+        const actionFeedback = {
+          action: action.action,
+          status: result.status === 'SUCCESS' ? 'success' : 'failed',
+          executed_at: result.executedAt ?? (action.x !== undefined && action.y !== undefined ? [action.x, action.y] : undefined),
+          timestamp: result.timestamp || new Date().toISOString(),
+          display_info: result.displayInfo,
+          message: result.message,
+        };
+        this.logger.info({ actionFeedback }, 'Desktop action execution structured feedback');
+
         if (result.status !== 'SUCCESS') {
            return {
              status: result.status === 'CONFIRMATION_REQUIRED' ? 'pending-approval' : 'failed',
@@ -259,26 +337,25 @@ Return ONLY JSON with the format: {"x": number, "y": number}`;
         });
 
         const text = modelRes.text.trim();
-        const jsonMatch = text.match(/\{[\s\S]*?"x"\s*:\s*([\d.]+)\s*,\s*"y"\s*:\s*([\d.]+)[\s\S]*?\}/);
-        if (jsonMatch) {
-          const rawX = parseFloat(jsonMatch[1]);
-          const rawY = parseFloat(jsonMatch[2]);
-
-          // Scale appropriately based on coordinate system returned by vision model
-          if (rawX <= 1.0 && rawY <= 1.0) {
-            resolvedX = Math.round(rawX * width);
-            resolvedY = Math.round(rawY * height);
-          } else if (rawX <= 100 && rawY <= 100 && width > 500) {
-            resolvedX = Math.round((rawX / 100) * width);
-            resolvedY = Math.round((rawY / 100) * height);
-          } else if (rawX <= 1000 && rawY <= 1000 && width > 1200) {
-            resolvedX = Math.round((rawX / 1000) * width);
-            resolvedY = Math.round((rawY / 1000) * height);
-          } else {
-            resolvedX = Math.round(rawX);
-            resolvedY = Math.round(rawY);
+        let parsedCoords: { x: number; y: number } | null = null;
+        try {
+          let jsonString = text;
+          const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+          if (match) jsonString = match[1].trim();
+          const parsed = JSON.parse(jsonString);
+          parsedCoords = this.coordinateService.resolve(parsed, width, height);
+        } catch {
+          const jsonMatch = text.match(/\{[\s\S]*?"x"\s*:\s*([\d.]+)\s*,\s*"y"\s*:\s*([\d.]+)[\s\S]*?\}/);
+          if (jsonMatch) {
+            const rawX = parseFloat(jsonMatch[1]);
+            const rawY = parseFloat(jsonMatch[2]);
+            parsedCoords = this.coordinateService.resolvePoint(rawX, rawY, width, height);
           }
-          this.logger.info({ resolvedX, resolvedY, rawX, rawY }, 'Resolved visual coordinates via vision model.');
+        }
+        if (parsedCoords) {
+          resolvedX = parsedCoords.x;
+          resolvedY = parsedCoords.y;
+          this.logger.info({ resolvedX, resolvedY }, 'Resolved visual coordinates via CoordinateResolutionService.');
         }
       } catch (err: any) {
         this.logger.warn({ err: err?.message || err }, 'Vision coordinate resolution failed; falling back to layout heuristics.');

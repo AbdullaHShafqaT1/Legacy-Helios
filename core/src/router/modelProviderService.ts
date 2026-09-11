@@ -145,7 +145,7 @@ export async function validateExternalApiKey(
   }
 
   if (provider === 'gemini') {
-    return GeminiConnector.validateApiKey(apiKey.trim(), model ?? 'gemini-1.5-flash');
+    return GeminiConnector.validateApiKey(apiKey.trim(), model ?? 'gemini-2.5-flash');
   }
 
   if (provider === 'openai') {

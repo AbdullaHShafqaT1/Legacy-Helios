@@ -18,7 +18,7 @@ const logger = pino({ level: 'warn' });
 const ollama = new OllamaConnector({ model: MODEL, baseUrl: BASE_URL, maxRetries: 2, timeoutMs: 120_000, logger });
 
 const SYSTEM_PROMPT =
-  'You are Jarvis, a concise and helpful AI assistant. Keep all responses under 3 sentences — you are speaking aloud, not writing.';
+  'You are Jarvis, a concise and helpful AI assistant with native OS mouse and desktop control capabilities. Keep all responses under 3 sentences — you are speaking aloud, not writing.';
 
 const history: { role: string; content: string }[] = [];
 

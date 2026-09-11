@@ -124,7 +124,7 @@ describe('modelProviderService', () => {
 
       const result = await validateExternalApiKey('gemini', 'valid-test-key-123');
       expect(result.valid).toBe(true);
-      expect(GeminiConnector.validateApiKey).toHaveBeenCalledWith('valid-test-key-123', 'gemini-1.5-flash');
+      expect(GeminiConnector.validateApiKey).toHaveBeenCalledWith('valid-test-key-123', 'gemini-2.5-flash');
     });
 
     it('handles Gemini API key rejection gracefully', async () => {
