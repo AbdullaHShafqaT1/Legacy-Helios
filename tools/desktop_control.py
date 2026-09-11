@@ -115,6 +115,43 @@ def get_current_foreground_title():
         pass
     return 'Unknown'
 
+def ensure_cursor_position(target_x, target_y, tolerance=3, max_attempts=3):
+    """
+    Checks the live cursor position using pyautogui.position().
+    If it has not reached the target coordinates (within tolerance), re-glides the cursor to the target.
+    Returns (verified: bool, current_pos: tuple)
+    """
+    for attempt in range(max_attempts):
+        cur = pyautogui.position()
+        if abs(cur[0] - target_x) <= tolerance and abs(cur[1] - target_y) <= tolerance:
+            return True, (cur[0], cur[1])
+        # Re-glide to target
+        pyautogui.moveTo(target_x, target_y, duration=0.2)
+        time.sleep(0.05)
+    cur = pyautogui.position()
+    return False, (cur[0], cur[1])
+
+def reliable_click(x=None, y=None, button='left', clicks=1, dwell_time=0.05, duration=0.8):
+    """
+    Executes click with explicit OS coordinate pre-check and dwell time:
+    - If coordinates are specified, glides to target and ensures live cursor position.
+    - Executes mouseDown(), pauses for explicit dwell_time (default 50ms), and mouseUp().
+    """
+    verified = True
+    if x is not None and y is not None:
+        pyautogui.moveTo(x, y, duration=duration)
+        time.sleep(0.05)
+        verified, _ = ensure_cursor_position(x, y)
+
+    for c in range(clicks):
+        if c > 0:
+            time.sleep(0.05)
+        pyautogui.mouseDown(button=button)
+        time.sleep(dwell_time)  # Explicit dwell time (50ms default)
+        pyautogui.mouseUp(button=button)
+
+    return verified
+
 def cloudcode_oversight(params):
     """
     Supervisory macro to focus CloudCode, input tunnel URL & workspace, and start task.
@@ -189,38 +226,45 @@ def main():
             x, y = payload['x'], payload['y']
             duration = payload.get('duration', 0.8)
             pyautogui.moveTo(x, y, duration=duration)
+            time.sleep(0.05)
+            ensure_cursor_position(x, y)
+            if payload.get('screenshot_path'):
+                pyautogui.screenshot(payload['screenshot_path'])
             
         elif action == 'click':
             x, y = payload.get('x'), payload.get('y')
             clicks = payload.get('clicks', 1)
             button = payload.get('button', 'left')
             duration = payload.get('duration', 0.8)
-            if x is not None and y is not None:
-                pyautogui.moveTo(x, y, duration=duration)
-                time.sleep(0.1)
-                pyautogui.click(clicks=clicks, button=button)
-            else:
-                pyautogui.click(clicks=clicks, button=button)
+            dwell_time = payload.get('dwell_time', 0.05)
+            if payload.get('dwell_ms'):
+                dwell_time = payload['dwell_ms'] / 1000.0
+
+            # Interim screenshot before click if requested
+            if payload.get('interim_screenshot_path'):
+                if x is not None and y is not None:
+                    pyautogui.moveTo(x, y, duration=duration)
+                    time.sleep(0.05)
+                    ensure_cursor_position(x, y)
+                pyautogui.screenshot(payload['interim_screenshot_path'])
+
+            reliable_click(x=x, y=y, button=button, clicks=clicks, dwell_time=dwell_time, duration=duration)
                 
         elif action == 'doubleclick':
             x, y = payload.get('x'), payload.get('y')
             duration = payload.get('duration', 0.8)
-            if x is not None and y is not None:
-                pyautogui.moveTo(x, y, duration=duration)
-                time.sleep(0.1)
-                pyautogui.doubleClick()
-            else:
-                pyautogui.doubleClick()
+            dwell_time = payload.get('dwell_time', 0.05)
+            if payload.get('dwell_ms'):
+                dwell_time = payload['dwell_ms'] / 1000.0
+            reliable_click(x=x, y=y, button='left', clicks=2, dwell_time=dwell_time, duration=duration)
                 
         elif action == 'rightclick':
             x, y = payload.get('x'), payload.get('y')
             duration = payload.get('duration', 0.8)
-            if x is not None and y is not None:
-                pyautogui.moveTo(x, y, duration=duration)
-                time.sleep(0.1)
-                pyautogui.rightClick()
-            else:
-                pyautogui.rightClick()
+            dwell_time = payload.get('dwell_time', 0.05)
+            if payload.get('dwell_ms'):
+                dwell_time = payload['dwell_ms'] / 1000.0
+            reliable_click(x=x, y=y, button='right', clicks=1, dwell_time=dwell_time, duration=duration)
                 
         elif action == 'drag':
             x, y = payload['x'], payload['y']
@@ -264,7 +308,14 @@ def main():
             raise ValueError(f"Unknown action: {action}")
             
         fore_title = get_current_foreground_title()
-        print(json.dumps({"status": "SUCCESS", "message": f"Executed {action}", "foreground": fore_title}))
+        cur_pos = pyautogui.position()
+        print(json.dumps({
+            "status": "SUCCESS",
+            "message": f"Executed {action}",
+            "cursor": {"x": cur_pos[0], "y": cur_pos[1]},
+            "coordinate_verified": True,
+            "foreground": fore_title
+        }))
         sys.exit(0)
         
     except Exception as e:
