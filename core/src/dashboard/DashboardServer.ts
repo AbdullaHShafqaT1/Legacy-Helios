@@ -4,11 +4,17 @@ import { Logger } from 'pino';
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { Config } from '../lib/config.js';
+import { Config, getRuntimeModelConfig, updateRuntimeModelConfig } from '../lib/config.js';
 import { HealthMonitor } from '../lib/health.js';
 import { PeriodicCaptureManager } from '../../../services/PeriodicCaptureManager.js';
 import { redactSecrets } from '../lib/redact.js';
 import { PermissionGatekeeper } from '../permissions/gatekeeper.js';
+import { ModelRouter } from '../router/modelRouter.js';
+import { fetchOllamaModels, fetchLMStudioModels, validateExternalApiKey } from '../router/modelProviderService.js';
+import { OllamaConnector } from '../../../connectors/ollama/OllamaConnector.js';
+import { LMStudioConnector } from '../../../connectors/lmstudio/LMStudioConnector.js';
+import { GeminiConnector } from '../../../connectors/gemini/GeminiConnector.js';
+import { CustomUrlConnector } from '../../../connectors/custom/CustomUrlConnector.js';
 
 export interface DashboardServerOptions {
   config: Config;
@@ -17,6 +23,7 @@ export interface DashboardServerOptions {
   healthMonitor: HealthMonitor;
   periodicCaptureManager?: PeriodicCaptureManager;
   gatekeeper?: PermissionGatekeeper;
+  modelRouter?: ModelRouter;
 }
 
 export class DashboardServer {
@@ -26,6 +33,7 @@ export class DashboardServer {
   private healthMonitor: HealthMonitor;
   private periodicCaptureManager?: PeriodicCaptureManager;
   private gatekeeper?: PermissionGatekeeper;
+  private modelRouter?: ModelRouter;
 
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
@@ -40,6 +48,7 @@ export class DashboardServer {
     this.healthMonitor = options.healthMonitor;
     this.periodicCaptureManager = options.periodicCaptureManager;
     this.gatekeeper = options.gatekeeper;
+    this.modelRouter = options.modelRouter;
   }
 
   /**
@@ -224,6 +233,46 @@ export class DashboardServer {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/models/ollama') {
+      const baseUrl = reqUrl.searchParams.get('baseUrl') || this.config.ollamaBaseUrl;
+      fetchOllamaModels(baseUrl).then(result => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      }).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ models: [], provider: 'ollama', error: err.message }));
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/models/lmstudio') {
+      const baseUrl = reqUrl.searchParams.get('baseUrl') || this.config.lmstudioBaseUrl;
+      fetchLMStudioModels(baseUrl).then(result => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      }).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ models: [], provider: 'lmstudio', error: err.message }));
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/models/active') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getRuntimeModelConfig()));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/models/validate-key') {
+      this.handleValidateKeyRequest(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/models/set-provider') {
+      this.handleSetProviderRequest(req, res);
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
   }
@@ -246,6 +295,112 @@ export class DashboardServer {
         this.broadcastState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, autonomous }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+  }
+
+  private handleValidateKeyRequest(req: IncomingMessage, res: ServerResponse): void {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body);
+        const provider = payload.provider || 'gemini';
+        const apiKey = payload.apiKey;
+        const model = payload.model;
+
+        if (!apiKey) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ valid: false, error: 'API key is required' }));
+          return;
+        }
+
+        const result = await validateExternalApiKey(provider, apiKey, model);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: false, error: err.message }));
+      }
+    });
+  }
+
+  private handleSetProviderRequest(req: IncomingMessage, res: ServerResponse): void {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const provider = payload.provider;
+        const model = payload.model;
+        const apiKey = payload.apiKey;
+        const customUrl = payload.customUrl;
+        const baseUrl = payload.baseUrl;
+
+        if (!provider) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'provider is required' }));
+          return;
+        }
+
+        updateRuntimeModelConfig({
+          provider,
+          model,
+          apiKey,
+          customUrl,
+          baseUrl,
+        });
+
+        if (this.modelRouter) {
+          this.modelRouter.setActiveProvider(provider);
+
+          if (provider === 'ollama') {
+            this.modelRouter.upsertRoute(new OllamaConnector({
+              model: model || this.config.ollamaModel || 'llava:latest',
+              baseUrl: baseUrl || this.config.ollamaBaseUrl || 'http://localhost:11434',
+              maxRetries: this.config.maxRetries,
+              timeoutMs: this.config.claudeTimeoutMs,
+              logger: this.logger,
+            }));
+          } else if (provider === 'lmstudio') {
+            this.modelRouter.upsertRoute(new LMStudioConnector({
+              model: model || this.config.lmstudioModel || 'local-model',
+              baseUrl: baseUrl || this.config.lmstudioBaseUrl || 'http://localhost:1234',
+              maxRetries: this.config.maxRetries,
+              timeoutMs: this.config.claudeTimeoutMs,
+              logger: this.logger,
+            }));
+          } else if (provider === 'api_key' || provider === 'gemini') {
+            const key = apiKey || this.config.geminiApiKey || process.env.GEMINI_API_KEY;
+            if (key) {
+              this.modelRouter.upsertRoute(new GeminiConnector({
+                apiKey: key,
+                model: model || 'gemini-1.5-flash',
+                maxRetries: this.config.maxRetries,
+                timeoutMs: this.config.claudeTimeoutMs,
+                logger: this.logger,
+              }));
+            }
+          } else if (provider === 'custom_url') {
+            this.modelRouter.upsertRoute(new CustomUrlConnector({
+              endpointUrl: customUrl || this.config.customEndpointUrl || 'http://localhost:8000/v1',
+              model: model || 'custom-model',
+              timeoutMs: this.config.claudeTimeoutMs,
+              logger: this.logger,
+            }));
+          }
+        }
+
+        this.broadcastState();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          activeProvider: provider,
+          activeModel: model,
+        }));
       } catch (err: any) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
@@ -372,48 +527,54 @@ export class DashboardServer {
     }
 
     // 3. Pending approvals list
-    const pendingRows = this.db.prepare(`
-      SELECT correlation_id, task_id, request_payload_json, created_at FROM pending_approvals
-      WHERE status = 'pending'
-      ORDER BY created_at DESC
-    `).all() as { correlation_id: string; task_id: string; request_payload_json: string; created_at: string }[];
+    let pending: any[] = [];
+    try {
+      const pendingRows = this.db.prepare(`
+        SELECT correlation_id, task_id, request_payload_json, created_at FROM pending_approvals
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+      `).all() as { correlation_id: string; task_id: string; request_payload_json: string; created_at: string }[];
 
-    const pending = pendingRows.map(row => {
-      let payloadParsed = {};
-      try {
-        payloadParsed = redactSecrets(JSON.parse(row.request_payload_json)) as any;
-      } catch {}
-      return {
-        correlationId: row.correlation_id,
-        taskId: row.task_id,
-        payload: payloadParsed,
-        createdAt: row.created_at
-      };
-    });
+      pending = pendingRows.map(row => {
+        let payloadParsed = {};
+        try {
+          payloadParsed = redactSecrets(JSON.parse(row.request_payload_json)) as any;
+        } catch {}
+        return {
+          correlationId: row.correlation_id,
+          taskId: row.task_id,
+          payload: payloadParsed,
+          createdAt: row.created_at
+        };
+      });
+    } catch {}
 
     // 4. Recent audit log actions
-    const auditRows = this.db.prepare(`
-      SELECT event_type, actor, action, params_json, approval_status, approver, timestamp FROM audit_log
-      ORDER BY id DESC LIMIT 15
-    `).all() as { event_type: string; actor: string; action: string; params_json: string | null; approval_status: string; approver: string | null; timestamp: string }[];
+    let auditLogs: any[] = [];
+    try {
+      const auditRows = this.db.prepare(`
+        SELECT event_type, actor, action, params_json, approval_status, approver, timestamp FROM audit_log
+        ORDER BY id DESC LIMIT 15
+      `).all() as { event_type: string; actor: string; action: string; params_json: string | null; approval_status: string; approver: string | null; timestamp: string }[];
 
-    const auditLogs = auditRows.map(row => {
-      let params = {};
-      if (row.params_json) {
-        try {
-          params = redactSecrets(JSON.parse(row.params_json)) as any;
-        } catch {}
-      }
-      return {
-        eventType: row.event_type,
-        actor: row.actor,
-        action: row.action,
-        params,
-        approvalStatus: row.approval_status,
-        approver: row.approver,
-        timestamp: row.timestamp
-      };
-    });
+      auditLogs = auditRows.map(row => {
+        let params = {};
+        if (row.params_json) {
+          try {
+            params = redactSecrets(JSON.parse(row.params_json)) as any;
+          } catch {}
+        }
+        return {
+          eventType: row.event_type,
+          actor: row.actor,
+          action: row.action,
+          params,
+          approvalStatus: row.approval_status,
+          approver: row.approver,
+          timestamp: row.timestamp
+        };
+      });
+    } catch {}
 
     return {
       workspaceName: activeWorkspaceName,
@@ -422,6 +583,7 @@ export class DashboardServer {
       auditLogs,
       screenshotActive: Boolean(this.periodicCaptureManager?.isActive()),
       autonomousMode: Boolean(this.gatekeeper?.isAutonomousMode()),
+      modelProvider: getRuntimeModelConfig(),
     };
   }
 

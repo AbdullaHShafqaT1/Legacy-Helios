@@ -4,6 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { OllamaConnector } from '../../connectors/ollama/OllamaConnector.js';
+import { LMStudioConnector } from '../../connectors/lmstudio/LMStudioConnector.js';
+import { GeminiConnector } from '../../connectors/gemini/GeminiConnector.js';
+import { CustomUrlConnector } from '../../connectors/custom/CustomUrlConnector.js';
+import { ModelRoute } from '../../core/src/router/modelRouter.js';
+import { fetchOllamaModels, fetchLMStudioModels, validateExternalApiKey } from '../../core/src/router/modelProviderService.js';
 import { openCliContext, CliContext } from '../../core/src/bootstrap.js';
 import pino from 'pino';
 
@@ -24,13 +29,87 @@ try {
   logger.warn({ err: err.message }, 'Failed to initialize database/queue context in web server');
 }
 
-const ollama = new OllamaConnector({
+let activeProvider = (process.env.JARVIS_MODEL_PROVIDER as string) || 'ollama';
+let activeModel = MODEL;
+let activeBaseUrl = BASE_URL;
+let activeApiKey = process.env.GEMINI_API_KEY || '';
+let activeCustomUrl = process.env.JARVIS_CUSTOM_ENDPOINT_URL || '';
+
+let activeConnector: ModelRoute = new OllamaConnector({
   model: MODEL,
   baseUrl: BASE_URL,
   maxRetries: 2,
   timeoutMs: 120_000,
   logger: pino({ level: 'warn' }),
 });
+
+function switchProvider(payload: {
+  provider: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  customUrl?: string;
+}) {
+  activeProvider = payload.provider;
+  if (payload.model) activeModel = payload.model;
+  if (payload.baseUrl) activeBaseUrl = payload.baseUrl;
+  if (payload.apiKey) activeApiKey = payload.apiKey;
+  if (payload.customUrl) activeCustomUrl = payload.customUrl;
+
+  logger.info({ activeProvider, activeModel }, 'Switching active LLM provider in Web Server');
+
+  if (activeProvider === 'ollama') {
+    activeConnector = new OllamaConnector({
+      model: activeModel || MODEL,
+      baseUrl: activeBaseUrl || BASE_URL,
+      maxRetries: 2,
+      timeoutMs: 120_000,
+      logger: pino({ level: 'warn' }),
+    });
+  } else if (activeProvider === 'lmstudio') {
+    activeConnector = new LMStudioConnector({
+      model: activeModel || 'local-model',
+      baseUrl: activeBaseUrl || 'http://localhost:1234',
+      maxRetries: 2,
+      timeoutMs: 60_000,
+      logger: pino({ level: 'warn' }),
+    });
+  } else if (activeProvider === 'api_key' || activeProvider === 'gemini') {
+    activeConnector = new GeminiConnector({
+      apiKey: activeApiKey,
+      model: activeModel || 'gemini-1.5-flash',
+      maxRetries: 2,
+      timeoutMs: 60_000,
+      logger: pino({ level: 'warn' }),
+    });
+  } else if (activeProvider === 'custom_url') {
+    activeConnector = new CustomUrlConnector({
+      endpointUrl: activeCustomUrl || 'http://localhost:8000/v1',
+      model: activeModel || 'custom-model',
+      timeoutMs: 60_000,
+      logger: pino({ level: 'warn' }),
+    });
+  }
+
+  // Forward provider change to core daemon if dashboard port is alive
+  try {
+    const postData = JSON.stringify(payload);
+    const forwardReq = http.request({
+      hostname: '127.0.0.1',
+      port: parseInt(DASHBOARD_PORT, 10),
+      path: '/api/models/set-provider',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+      timeout: 1000,
+    });
+    forwardReq.on('error', () => {});
+    forwardReq.write(postData);
+    forwardReq.end();
+  } catch {}
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -44,8 +123,90 @@ const SYSTEM_PROMPT =
   'Keep spoken responses concise — 2-3 sentences maximum. ' +
   'For text responses you may be more detailed when appropriate.';
 
-// ─── HTTP static file server ──────────────────────────────────────────────────
+// ─── HTTP server with API endpoints and static file serving ───────────────────
 const httpServer = http.createServer((req, res) => {
+  const reqUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const pathname = reqUrl.pathname;
+
+  if (req.method === 'GET' && pathname === '/api/models/ollama') {
+    const baseUrl = reqUrl.searchParams.get('baseUrl') || activeBaseUrl || BASE_URL;
+    fetchOllamaModels(baseUrl).then(result => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ models: [], provider: 'ollama', error: err.message }));
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/models/lmstudio') {
+    const baseUrl = reqUrl.searchParams.get('baseUrl') || 'http://localhost:1234';
+    fetchLMStudioModels(baseUrl).then(result => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ models: [], provider: 'lmstudio', error: err.message }));
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/models/active') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      provider: activeProvider,
+      model: activeModel,
+      baseUrl: activeBaseUrl,
+      customUrl: activeCustomUrl,
+      apiKeySet: Boolean(activeApiKey),
+    }));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/models/validate-key') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body);
+        const result = await validateExternalApiKey(payload.provider || 'gemini', payload.apiKey, payload.model);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/models/set-provider') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload.provider) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'provider is required' }));
+          return;
+        }
+        switchProvider(payload);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          provider: activeProvider,
+          model: activeModel,
+        }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   const safePath = (req.url === '/' ? '/index.html' : req.url!).replace(/\.\./g, '');
   const filePath = path.join(__dirname, safePath);
   const ext = path.extname(filePath);
@@ -142,9 +303,41 @@ wss.on('connection', async (ws: WebSocket) => {
     send({ type: 'mode_ack', autonomous: auto, success: true });
   });
 
+  // Send current active model provider state to client
+  send({
+    type: 'provider_ack',
+    provider: activeProvider,
+    model: activeModel,
+    baseUrl: activeBaseUrl,
+    customUrl: activeCustomUrl,
+    apiKeySet: Boolean(activeApiKey),
+    success: true,
+  });
+
   ws.on('message', async (raw) => {
     let msg: any;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+    if (msg.type === 'set_provider') {
+      try {
+        switchProvider(msg);
+        send({
+          type: 'provider_ack',
+          provider: activeProvider,
+          model: activeModel,
+          success: true,
+        });
+      } catch (err: any) {
+        send({
+          type: 'provider_ack',
+          provider: activeProvider,
+          model: activeModel,
+          success: false,
+          error: err.message,
+        });
+      }
+      return;
+    }
 
     if (msg.type === 'set_mode') {
       isAutonomousMode = Boolean(msg.autonomous);
@@ -196,7 +389,7 @@ wss.on('connection', async (ws: WebSocket) => {
     const isActionable = Boolean(cliCtx) && (isExplicitlyTagged || isAutonomousMode || hasDesktopKeywords || isActionVerb);
 
     if (!isActionable) {
-      // Standard Conversational Completion
+      // Standard Conversational Completion using dynamically active connector
       const turns = history
         .map(h => `${h.role === 'user' ? 'User' : 'Jarvis'}: ${h.content}`)
         .join('\n');
@@ -205,7 +398,7 @@ wss.on('connection', async (ws: WebSocket) => {
       send({ type: 'state', state: 'thinking' });
 
       try {
-        const result = await ollama.invoke({ description: prompt });
+        const result = await activeConnector.invoke({ description: prompt });
         const reply = result.text.trim();
 
         history.push({ role: 'user', content: userText });
@@ -213,8 +406,8 @@ wss.on('connection', async (ws: WebSocket) => {
 
         send({ type: 'reply', text: reply });
       } catch (err: any) {
-        logger.error({ err }, 'Ollama call failed');
-        send({ type: 'error', text: `Error: ${err.message}` });
+        logger.error({ err }, 'Active model call failed');
+        send({ type: 'error', text: `Error (${activeProvider}): ${err.message}` });
       } finally {
         send({ type: 'state', state: 'idle' });
       }

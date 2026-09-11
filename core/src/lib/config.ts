@@ -73,6 +73,51 @@ export interface Config {
   voiceDuplexInterruptThreshold: number;
   voiceDuplexModelType: 'local' | 'cloud';
   dashboardPort: number;
+  activeModelProvider?: 'ollama' | 'lmstudio' | 'api_key' | 'custom_url';
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+  lmstudioModel?: string;
+  lmstudioBaseUrl?: string;
+  geminiApiKey?: string;
+  customEndpointUrl?: string;
+}
+
+export interface ModelRuntimeState {
+  provider: 'ollama' | 'lmstudio' | 'api_key' | 'custom_url';
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  customUrl?: string;
+}
+
+let runtimeModelConfig: ModelRuntimeState = {
+  provider: 'ollama',
+  model: 'llava:latest',
+  baseUrl: 'http://localhost:11434',
+};
+
+/**
+ * Retrieves the current runtime model configuration.
+ */
+export function getRuntimeModelConfig(): ModelRuntimeState {
+  return { ...runtimeModelConfig };
+}
+
+/**
+ * Updates the active runtime model configuration for the agent orchestration layer.
+ */
+export function updateRuntimeModelConfig(update: Partial<ModelRuntimeState>): ModelRuntimeState {
+  runtimeModelConfig = {
+    ...runtimeModelConfig,
+    ...update,
+  };
+  if (cachedConfig) {
+    if (update.provider) cachedConfig.activeModelProvider = update.provider;
+    if (update.model) cachedConfig.model = update.model;
+    if (update.apiKey) cachedConfig.geminiApiKey = update.apiKey;
+    if (update.customUrl) cachedConfig.customEndpointUrl = update.customUrl;
+  }
+  return { ...runtimeModelConfig };
 }
 
 let cachedConfig: Config | null = null;
@@ -390,6 +435,13 @@ export function loadConfig(requireApiKey = true): Config {
     voiceDuplexInterruptThreshold,
     voiceDuplexModelType,
     dashboardPort,
+    activeModelProvider: (process.env.JARVIS_MODEL_PROVIDER as any) || 'ollama',
+    ollamaModel: process.env.JARVIS_OLLAMA_MODEL || 'llava:latest',
+    ollamaBaseUrl: process.env.JARVIS_OLLAMA_BASE_URL || 'http://localhost:11434',
+    lmstudioModel: process.env.JARVIS_LMSTUDIO_MODEL || 'local-model',
+    lmstudioBaseUrl: process.env.JARVIS_LMSTUDIO_BASE_URL || 'http://localhost:1234',
+    geminiApiKey: process.env.GEMINI_API_KEY || process.env.JARVIS_GEMINI_API_KEY || '',
+    customEndpointUrl: process.env.JARVIS_CUSTOM_ENDPOINT_URL || '',
   };
 
   return cachedConfig;

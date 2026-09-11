@@ -1,5 +1,7 @@
 export type TaskType = "coding" | "reasoning" | "research" | "vision";
 
+export type ModelProviderName = 'ollama' | 'claude' | 'lmstudio' | 'gemini' | 'api_key' | 'custom_url' | (string & {});
+
 export interface ModelRequestContext {
   description: string;
   fileContext?: unknown;
@@ -7,7 +9,7 @@ export interface ModelRequestContext {
     base64: string;
     mediaType: string;
   };
-  provider?: 'ollama' | 'claude';
+  provider?: ModelProviderName;
 }
 
 export interface ModelResponse {
@@ -30,6 +32,7 @@ export class ModelRouterError extends Error {
 
 export class ModelRouter {
   private routes: ModelRoute[] = [];
+  private activeProvider: ModelProviderName = 'ollama';
 
   /**
    * Registers a new route handler in the model router.
@@ -41,8 +44,67 @@ export class ModelRouter {
   }
 
   /**
+   * Unregisters route handlers matching a predicate.
+   */
+  unregister(predicate: (route: ModelRoute) => boolean): void {
+    this.routes = this.routes.filter((r) => !predicate(r));
+  }
+
+  /**
+   * Replaces or registers a route handler by constructor name.
+   */
+  upsertRoute(route: ModelRoute): void {
+    const className = route.constructor.name;
+    this.routes = this.routes.filter((r) => r.constructor.name !== className);
+    this.routes.push(route);
+  }
+
+  /**
+   * Sets the globally active provider for the agent orchestration layer.
+   */
+  setActiveProvider(provider: ModelProviderName): void {
+    this.activeProvider = provider;
+  }
+
+  /**
+   * Gets the currently active provider.
+   */
+  getActiveProvider(): ModelProviderName {
+    return this.activeProvider;
+  }
+
+  /**
+   * Returns all currently registered routes.
+   */
+  getRoutes(): ModelRoute[] {
+    return [...this.routes];
+  }
+
+  /**
+   * Resolves a route for a given provider name and task type.
+   */
+  private findRouteForProvider(provider: ModelProviderName, taskType: TaskType): ModelRoute | undefined {
+    if (provider === 'ollama') {
+      return this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector');
+    }
+    if (provider === 'lmstudio') {
+      return this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'LMStudioConnector');
+    }
+    if (provider === 'gemini' || provider === 'api_key') {
+      return this.routes.find(r => r.taskTypes.includes(taskType) && (r.constructor.name === 'GeminiConnector' || r.constructor.name === 'ClaudeConnector'));
+    }
+    if (provider === 'claude') {
+      return this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'ClaudeConnector');
+    }
+    if (provider === 'custom_url') {
+      return this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'CustomUrlConnector');
+    }
+    return this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name.toLowerCase().includes(provider.toLowerCase()));
+  }
+
+  /**
    * Routes a request to the first registered route capable of handling the task type.
-   * Matches preferred provider if specified.
+   * Matches preferred provider if specified, otherwise uses active provider.
    *
    * @param taskType The type of LLM processing required.
    * @param context The request parameters.
@@ -52,15 +114,16 @@ export class ModelRouter {
   async route(taskType: TaskType, context: ModelRequestContext): Promise<ModelResponse> {
     let route: ModelRoute | undefined;
 
-    if (context.provider === 'ollama') {
-      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector');
-    } else if (context.provider === 'claude') {
-      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'ClaudeConnector');
+    const targetProvider = context.provider || this.activeProvider;
+
+    if (targetProvider) {
+      route = this.findRouteForProvider(targetProvider, taskType);
     }
 
     if (!route) {
-      // Prefer local OllamaConnector by default for all task types
-      route = this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector')
+      // Fallback: search by activeProvider, then Ollama, then any capable route
+      route = this.findRouteForProvider(this.activeProvider, taskType)
+           || this.routes.find(r => r.taskTypes.includes(taskType) && r.constructor.name === 'OllamaConnector')
            || this.routes.find(r => r.taskTypes.includes(taskType));
     }
     
@@ -71,3 +134,4 @@ export class ModelRouter {
     return route.invoke(context);
   }
 }
+

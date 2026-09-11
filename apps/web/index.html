@@ -30,11 +30,58 @@
         <span class="version-tag">LEGACY HELIOS OS v10.6</span>
       </div>
       <div class="header-center">
-        <div class="model-badge" id="model-badge">
-          <span class="badge-dot"></span>
-          <span id="model-name">llava:latest</span>
-          <span class="badge-sep">|</span>
-          <span>localhost:11434</span>
+        <div class="model-selector-bar" id="model-selector-bar">
+          <!-- Primary Provider Dropdown -->
+          <div class="selector-primary">
+            <span class="selector-tag">PROVIDER:</span>
+            <select id="provider-select" class="hud-select" aria-label="Select LLM Provider">
+              <option value="ollama">Ollama</option>
+              <option value="lmstudio">LM Studio</option>
+              <option value="api_key">API Key</option>
+              <option value="custom_url">Custom URL</option>
+            </select>
+          </div>
+
+          <!-- Conditional Secondary Controls directly adjacent -->
+          <div class="selector-secondary" id="secondary-controls">
+            <!-- 1. Ollama Model Dropdown -->
+            <div id="secondary-ollama" class="secondary-group">
+              <select id="ollama-model-select" class="hud-select" aria-label="Select Ollama Model">
+                <option value="llava:latest">llava:latest</option>
+              </select>
+              <button type="button" id="refresh-ollama-btn" class="hud-mini-btn" title="Refresh Ollama Models" aria-label="Refresh Ollama Models">↻</button>
+            </div>
+
+            <!-- 2. LM Studio Model Dropdown -->
+            <div id="secondary-lmstudio" class="secondary-group" style="display: none;">
+              <select id="lmstudio-model-select" class="hud-select" aria-label="Select LM Studio Model">
+                <option value="">Querying models...</option>
+              </select>
+              <button type="button" id="refresh-lmstudio-btn" class="hud-mini-btn" title="Refresh LM Studio Models" aria-label="Refresh LM Studio Models">↻</button>
+            </div>
+
+            <!-- 3. API Key Input with Show/Hide Toggle and Verify -->
+            <div id="secondary-api-key" class="secondary-group" style="display: none;">
+              <div class="input-with-toggle">
+                <input type="password" id="api-key-input" class="hud-input" placeholder="Paste Gemini API Key..." autocomplete="off" spellcheck="false" aria-label="External API Key" />
+                <button type="button" id="toggle-key-visibility" class="toggle-vis-btn" title="Show/Hide API Key" aria-label="Toggle API Key visibility">SHOW</button>
+              </div>
+              <button type="button" id="verify-key-btn" class="hud-mini-btn btn-verify" title="Verify API Key" aria-label="Verify API Key">VERIFY</button>
+              <span id="key-status-indicator" class="key-status-indicator" aria-hidden="true"></span>
+            </div>
+
+            <!-- 4. Custom URL Input -->
+            <div id="secondary-custom-url" class="secondary-group" style="display: none;">
+              <input type="text" id="custom-url-input" class="hud-input custom-url-input" placeholder="http://localhost:8000/v1" autocomplete="off" spellcheck="false" aria-label="Custom Endpoint URL" />
+              <button type="button" id="apply-custom-url-btn" class="hud-mini-btn" title="Apply Custom Endpoint" aria-label="Apply Custom Endpoint">SET</button>
+            </div>
+          </div>
+
+          <!-- Active Model Status Badge -->
+          <div class="model-badge" id="model-badge" title="Active Model Status">
+            <span class="badge-dot" id="model-status-dot"></span>
+            <span id="model-name">llava:latest</span>
+          </div>
         </div>
       </div>
       <div class="header-right">

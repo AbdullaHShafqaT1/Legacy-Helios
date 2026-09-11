@@ -18,7 +18,8 @@
     "agents/**/*",
     "connectors/**/*",
     "cli/**/*",
-    "services/**/*"
+    "services/**/*",
+    "apps/web/server.ts"
   ],
   "exclude": [
     "node_modules",

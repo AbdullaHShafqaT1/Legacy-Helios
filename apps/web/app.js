@@ -29,6 +29,50 @@ const autonomousToggle = document.getElementById('autonomous-toggle');
 const toggleWrap    = document.querySelector('.autonomous-toggle-wrap');
 const toggleLabel   = document.getElementById('toggle-label');
 
+// ── Model Provider DOM refs & state ───────────────────────────
+const providerSelect      = document.getElementById('provider-select');
+const secondaryControls   = document.getElementById('secondary-controls');
+const secOllama           = document.getElementById('secondary-ollama');
+const ollamaModelSelect   = document.getElementById('ollama-model-select');
+const refreshOllamaBtn    = document.getElementById('refresh-ollama-btn');
+const secLMStudio         = document.getElementById('secondary-lmstudio');
+const lmstudioModelSelect = document.getElementById('lmstudio-model-select');
+const refreshLMStudioBtn  = document.getElementById('refresh-lmstudio-btn');
+const secApiKey           = document.getElementById('secondary-api-key');
+const apiKeyInput         = document.getElementById('api-key-input');
+const toggleKeyVisBtn     = document.getElementById('toggle-key-visibility');
+const verifyKeyBtn        = document.getElementById('verify-key-btn');
+const keyStatusIndicator  = document.getElementById('key-status-indicator');
+const secCustomUrl        = document.getElementById('secondary-custom-url');
+const customUrlInput      = document.getElementById('custom-url-input');
+const applyCustomUrlBtn   = document.getElementById('apply-custom-url-btn');
+const modelNameDisplay    = document.getElementById('model-name');
+const modelStatusDot      = document.getElementById('model-status-dot');
+
+const MODEL_STORAGE_KEY = 'jarvis_model_provider_config';
+
+function getStoredModelConfig() {
+  try {
+    const raw = localStorage.getItem(MODEL_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {
+    provider: 'ollama',
+    ollamaModel: 'llava:latest',
+    lmstudioModel: 'local-model',
+    apiKey: '',
+    customUrl: 'http://localhost:8000/v1',
+  };
+}
+
+function saveStoredModelConfig(conf) {
+  try {
+    localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(conf));
+  } catch {}
+}
+
+let providerConfig = getStoredModelConfig();
+
 // ── State transitions ─────────────────────────────────────────
 const STATE_META = {
   idle:      { label: 'IDLE',       sub: 'Awaiting input...',        orbClass: '' },
@@ -96,6 +140,16 @@ function connectWS() {
       }
       if (!msg.success && msg.error) {
         appendMessage('error', `Core daemon mode sync error: ${msg.error}`);
+      }
+
+    } else if (msg.type === 'provider_ack') {
+      if (msg.provider) {
+        providerConfig.provider = msg.provider;
+        if (msg.model) {
+          if (msg.provider === 'ollama') providerConfig.ollamaModel = msg.model;
+          if (msg.provider === 'lmstudio') providerConfig.lmstudioModel = msg.model;
+        }
+        updateActiveModelBadge();
       }
 
     } else if (msg.type === 'system' || msg.type === 'progress') {
@@ -353,6 +407,250 @@ window.addEventListener('click', () => {
   }
 });
 
+// ── Model Provider Controller ─────────────────────────────────
+function updateSecondaryVisibility(provider) {
+  if (secOllama) secOllama.style.display = provider === 'ollama' ? 'flex' : 'none';
+  if (secLMStudio) secLMStudio.style.display = provider === 'lmstudio' ? 'flex' : 'none';
+  if (secApiKey) secApiKey.style.display = provider === 'api_key' ? 'flex' : 'none';
+  if (secCustomUrl) secCustomUrl.style.display = provider === 'custom_url' ? 'flex' : 'none';
+  updateActiveModelBadge();
+}
+
+function updateActiveModelBadge() {
+  if (!modelNameDisplay) return;
+  const p = providerConfig.provider;
+  if (p === 'ollama') {
+    modelNameDisplay.textContent = providerConfig.ollamaModel || 'llava:latest';
+  } else if (p === 'lmstudio') {
+    modelNameDisplay.textContent = providerConfig.lmstudioModel || 'LM Studio';
+  } else if (p === 'api_key') {
+    modelNameDisplay.textContent = 'Gemini 1.5';
+  } else if (p === 'custom_url') {
+    try {
+      const url = new URL(providerConfig.customUrl || 'http://localhost:8000');
+      modelNameDisplay.textContent = `Custom (${url.host})`;
+    } catch {
+      modelNameDisplay.textContent = 'Custom URL';
+    }
+  }
+}
+
+let fetchingOllama = false;
+async function fetchOllamaModels() {
+  if (fetchingOllama || !ollamaModelSelect) return;
+  fetchingOllama = true;
+  if (refreshOllamaBtn) refreshOllamaBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/models/ollama');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.models && data.models.length > 0) {
+        ollamaModelSelect.innerHTML = '';
+        data.models.forEach((m) => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          ollamaModelSelect.appendChild(opt);
+        });
+
+        if (providerConfig.ollamaModel && data.models.some((m) => m.id === providerConfig.ollamaModel)) {
+          ollamaModelSelect.value = providerConfig.ollamaModel;
+        } else {
+          providerConfig.ollamaModel = ollamaModelSelect.value;
+          saveStoredModelConfig(providerConfig);
+        }
+      } else {
+        ollamaModelSelect.innerHTML = '<option value="llava:latest">llava:latest (default)</option>';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch Ollama models:', err);
+  } finally {
+    fetchingOllama = false;
+    if (refreshOllamaBtn) refreshOllamaBtn.disabled = false;
+    updateActiveModelBadge();
+  }
+}
+
+let fetchingLMStudio = false;
+async function fetchLMStudioModels() {
+  if (fetchingLMStudio || !lmstudioModelSelect) return;
+  fetchingLMStudio = true;
+  if (refreshLMStudioBtn) refreshLMStudioBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/models/lmstudio');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.models && data.models.length > 0) {
+        lmstudioModelSelect.innerHTML = '';
+        data.models.forEach((m) => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          lmstudioModelSelect.appendChild(opt);
+        });
+
+        if (providerConfig.lmstudioModel && data.models.some((m) => m.id === providerConfig.lmstudioModel)) {
+          lmstudioModelSelect.value = providerConfig.lmstudioModel;
+        } else {
+          providerConfig.lmstudioModel = lmstudioModelSelect.value;
+          saveStoredModelConfig(providerConfig);
+        }
+      } else {
+        lmstudioModelSelect.innerHTML = '<option value="local-model">local-model (default)</option>';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch LM Studio models:', err);
+  } finally {
+    fetchingLMStudio = false;
+    if (refreshLMStudioBtn) refreshLMStudioBtn.disabled = false;
+    updateActiveModelBadge();
+  }
+}
+
+async function dispatchProviderChange() {
+  saveStoredModelConfig(providerConfig);
+  updateActiveModelBadge();
+
+  let targetModel = '';
+  if (providerConfig.provider === 'ollama') targetModel = providerConfig.ollamaModel || 'llava:latest';
+  else if (providerConfig.provider === 'lmstudio') targetModel = providerConfig.lmstudioModel || 'local-model';
+  else if (providerConfig.provider === 'api_key') targetModel = 'gemini-1.5-flash';
+  else if (providerConfig.provider === 'custom_url') targetModel = 'custom-model';
+
+  const payload = {
+    provider: providerConfig.provider,
+    model: targetModel,
+    apiKey: providerConfig.apiKey,
+    customUrl: providerConfig.customUrl,
+  };
+
+  // Sync via WebSocket
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'set_provider', ...payload }));
+  }
+
+  // Sync via HTTP API
+  try {
+    await fetch('/api/models/set-provider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {}
+}
+
+function initModelProviderControls() {
+  if (!providerSelect) return;
+
+  // Restore stored values
+  providerSelect.value = providerConfig.provider || 'ollama';
+  if (apiKeyInput && providerConfig.apiKey) apiKeyInput.value = providerConfig.apiKey;
+  if (customUrlInput && providerConfig.customUrl) customUrlInput.value = providerConfig.customUrl;
+
+  updateSecondaryVisibility(providerConfig.provider);
+
+  if (providerConfig.provider === 'ollama') {
+    fetchOllamaModels();
+  } else if (providerConfig.provider === 'lmstudio') {
+    fetchLMStudioModels();
+  }
+
+  // Event Listeners
+  providerSelect.addEventListener('change', () => {
+    providerConfig.provider = providerSelect.value;
+    updateSecondaryVisibility(providerConfig.provider);
+
+    if (providerConfig.provider === 'ollama') {
+      fetchOllamaModels();
+    } else if (providerConfig.provider === 'lmstudio') {
+      fetchLMStudioModels();
+    }
+
+    dispatchProviderChange();
+    appendMessage('system', `Provider switched to ${providerSelect.options[providerSelect.selectedIndex].text}`);
+  });
+
+  if (ollamaModelSelect) {
+    ollamaModelSelect.addEventListener('change', () => {
+      providerConfig.ollamaModel = ollamaModelSelect.value;
+      dispatchProviderChange();
+    });
+  }
+
+  if (refreshOllamaBtn) {
+    refreshOllamaBtn.addEventListener('click', () => fetchOllamaModels());
+  }
+
+  if (lmstudioModelSelect) {
+    lmstudioModelSelect.addEventListener('change', () => {
+      providerConfig.lmstudioModel = lmstudioModelSelect.value;
+      dispatchProviderChange();
+    });
+  }
+
+  if (refreshLMStudioBtn) {
+    refreshLMStudioBtn.addEventListener('click', () => fetchLMStudioModels());
+  }
+
+  if (toggleKeyVisBtn && apiKeyInput) {
+    toggleKeyVisBtn.addEventListener('click', () => {
+      const isPassword = apiKeyInput.type === 'password';
+      apiKeyInput.type = isPassword ? 'text' : 'password';
+      toggleKeyVisBtn.textContent = isPassword ? 'HIDE' : 'SHOW';
+    });
+  }
+
+  if (verifyKeyBtn && apiKeyInput) {
+    verifyKeyBtn.addEventListener('click', async () => {
+      const key = apiKeyInput.value.trim();
+      if (!key) {
+        appendMessage('error', 'Please enter an API key to verify.');
+        return;
+      }
+      if (keyStatusIndicator) keyStatusIndicator.className = 'key-status-indicator verifying';
+      verifyKeyBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/models/validate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'gemini', apiKey: key }),
+        });
+        const data = await res.json();
+        if (data.valid) {
+          if (keyStatusIndicator) keyStatusIndicator.className = 'key-status-indicator valid';
+          appendMessage('system', 'Google Generative AI (Gemini) API key verified successfully.');
+          providerConfig.apiKey = key;
+          dispatchProviderChange();
+        } else {
+          if (keyStatusIndicator) keyStatusIndicator.className = 'key-status-indicator invalid';
+          appendMessage('error', `API Key verification failed: ${data.error || 'Invalid credentials'}`);
+        }
+      } catch (err) {
+        if (keyStatusIndicator) keyStatusIndicator.className = 'key-status-indicator invalid';
+        appendMessage('error', `Verification request error: ${err.message}`);
+      } finally {
+        verifyKeyBtn.disabled = false;
+      }
+    });
+  }
+
+  if (applyCustomUrlBtn && customUrlInput) {
+    applyCustomUrlBtn.addEventListener('click', () => {
+      const url = customUrlInput.value.trim();
+      if (!url) return;
+      providerConfig.customUrl = url;
+      dispatchProviderChange();
+      appendMessage('system', `Custom endpoint set to ${url}`);
+    });
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────
 initSpeechRecognition();
+initModelProviderControls();
 connectWS();

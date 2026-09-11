@@ -270,6 +270,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
     healthMonitor,
     periodicCaptureManager,
     gatekeeper,
+    modelRouter,
   });
 
   let webProcess: ChildProcess | null = null;
