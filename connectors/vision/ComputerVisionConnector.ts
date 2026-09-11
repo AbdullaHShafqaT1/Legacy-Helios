@@ -19,6 +19,8 @@ export interface DesktopObservation {
   display: number;
   width: number;
   height: number;
+  buffer?: Buffer;
+  base64?: string;
   screenshotPath?: string;
   imageFixtureFallbackUsed: boolean;
   error?: string;
@@ -47,7 +49,7 @@ export class ComputerVisionConnector {
 
   /**
    * Captures a screenshot of the specified monitor display and returns a structured DesktopObservation.
-   * Leverages scripts/screenshot.ps1. If capture fails in a headless runner, falls back to a real image fixture.
+   * Direct in-memory screengrab logic without PowerShell-to-Python trampolines.
    */
   async captureScreen(actor: AgentRole, displayIndex?: number): Promise<DesktopObservation> {
     const config = loadConfig(false);
@@ -65,21 +67,29 @@ export class ComputerVisionConnector {
     }
 
     const timestamp = new Date().toISOString();
+
+    if (preferredDisplay < 0 || preferredDisplay >= 10) {
+      this.auditLog.recordOutcome(authorization.correlationId, actor, 'vision-read', `failed — invalid display index ${preferredDisplay}`);
+      return {
+        success: false,
+        timestamp,
+        display: preferredDisplay,
+        width: 0,
+        height: 0,
+        imageFixtureFallbackUsed: false,
+        error: `Invalid display index: ${preferredDisplay}`,
+      };
+    }
+
     const tempDir = os.tmpdir();
     const targetFilename = `screenshot_${Date.now()}.png`;
     const targetPath = path.join(tempDir, targetFilename);
-    const scriptPath = path.resolve(config.projectRoot, 'scripts/screenshot.ps1');
+    const scriptPath = path.resolve(config.projectRoot, 'tools/desktop_control.py');
 
     try {
-      // Spawn PowerShell screenshot capture
-      const ps = spawn('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
+      const ps = spawn('python', [
         scriptPath,
-        targetPath,
-        preferredDisplay.toString(),
+        JSON.stringify({ action: 'screenshot', screenshot_path: targetPath })
       ]);
 
       let stdout = '';
@@ -100,7 +110,7 @@ export class ComputerVisionConnector {
 
         ps.on('close', (code) => {
           clearTimeout(timeout);
-          if (code === 0 && fs.existsSync(targetPath)) {
+          if (code === 0) {
             resolve();
           } else {
             reject(new Error(`Screenshot script failed with exit code ${code}. Stderr: ${stderr}`));
@@ -113,15 +123,11 @@ export class ComputerVisionConnector {
         });
       });
 
-      // Query display resolution
-      const size = fs.statSync(targetPath).size;
-      let width = 1920;
-      let height = 1080;
-      const resMatch = stdout.trim().match(/(\d+)x(\d+)/);
-      if (resMatch) {
-        width = parseInt(resMatch[1], 10);
-        height = parseInt(resMatch[2], 10);
-      }
+      const parsed = JSON.parse(stdout.trim());
+      const width = parsed.width || 1920;
+      const height = parsed.height || 1080;
+      const base64Data = parsed.base64;
+      const buffer = base64Data ? Buffer.from(base64Data, 'base64') : undefined;
 
       const observation: DesktopObservation = {
         success: true,
@@ -129,6 +135,8 @@ export class ComputerVisionConnector {
         display: preferredDisplay,
         width,
         height,
+        buffer,
+        base64: base64Data,
         screenshotPath: targetPath,
         imageFixtureFallbackUsed: false,
       };
@@ -139,7 +147,7 @@ export class ComputerVisionConnector {
         authorization.correlationId,
         actor,
         'vision-read',
-        `success — screen capture saved to ${targetPath} (${size} bytes)`
+        `success — screen capture completed (${width}x${height})`
       );
 
       return observation;
@@ -198,12 +206,11 @@ export class ComputerVisionConnector {
   async analyzeScreen(actor: AgentRole, prompt: string, displayIndex?: number): Promise<string> {
     const observation = await this.captureScreen(actor, displayIndex);
 
-    if (!observation.success || !observation.screenshotPath) {
+    if (!observation.success) {
       throw new Error(`Screen analysis failed: Unable to acquire screenshot. Reason: ${observation.error}`);
     }
 
-    // Convert file to base64
-    const base64Data = fs.readFileSync(observation.screenshotPath).toString('base64');
+    const base64Data = observation.base64 || (observation.screenshotPath ? fs.readFileSync(observation.screenshotPath).toString('base64') : '');
     
     // Route request to multimodal ModelRouter
     const modelResponse = await this.modelRouter.route('vision', {

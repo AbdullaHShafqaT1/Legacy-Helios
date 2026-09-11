@@ -297,4 +297,50 @@ describe('DesktopOperatorAgent Closed-Loop Visual Feedback & Verification', () =
     // Default heuristic at 1920x1080 (0.28*1920 = 538, 0.26*1080 = 281)
     expect(mockDesktopConnector.click).toHaveBeenCalledWith('desktop-operator', 538, 281);
   });
+
+  it('should skip hover and post-click verification when high-confidence direct coordinates are supplied', async () => {
+    mockModelRouter.route.mockImplementation(async (taskType: string) => {
+      if (taskType === 'reasoning') {
+        return {
+          text: JSON.stringify({
+            actions: [
+              {
+                action: 'click_visual',
+                x: 1200,
+                y: 800,
+                confidence: 0.95,
+                skip_hover: true,
+                skip_verification: true,
+              },
+            ],
+          }),
+        };
+      }
+      return { text: '{}' };
+    });
+
+    const result = await agent.process({
+      taskId: 'test-task-6',
+      description: 'Click directly at 1200, 800 with high confidence',
+    });
+
+    expect(result.status).toBe('completed');
+    expect(mockDesktopConnector.moveMouse).toHaveBeenCalledWith('desktop-operator', 1200, 800);
+    expect(mockDesktopConnector.click).toHaveBeenCalledWith('desktop-operator', 1200, 800);
+  });
+
+  it('should respect custom constructor options for hover and post-click delays', () => {
+    const fastAgent = new DesktopOperatorAgent(
+      mockModelRouter as any,
+      mockDesktopConnector as any,
+      mockMemoryManager as any,
+      logger,
+      undefined,
+      undefined,
+      { hoverDwellMs: 50, postClickWaitMs: 100 }
+    );
+    expect((fastAgent as any).defaultHoverDwellMs).toBe(50);
+    expect((fastAgent as any).defaultPostClickWaitMs).toBe(100);
+  });
 });
+

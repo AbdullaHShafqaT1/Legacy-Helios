@@ -47,6 +47,8 @@ export interface CliContext {
   db: Database.Database;
   queue: TaskQueue;
   auditLog: AuditLog;
+  vectorStore?: SqliteVectorStore;
+  memoryManager?: MemoryManager;
 }
 
 export interface JarvisContext extends CliContext {
@@ -84,12 +86,40 @@ export function openCliContext(loggerName = 'jarvis-cli'): CliContext {
   const queue = new TaskQueue(db, createLogger('task-queue', config.logLevel));
   const auditLog = new AuditLog(db);
 
+  let vectorStore: SqliteVectorStore | undefined;
+  let memoryManager: MemoryManager | undefined;
+
+  try {
+    const gatekeeper = new PermissionGatekeeper(
+      auditLog,
+      { requestApproval: async () => true },
+      createLogger('gatekeeper', config.logLevel)
+    );
+    vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));
+    const embeddingProvider = new LocalEmbeddingProvider(config.embeddingDimensions);
+    const embeddingPipeline = new EmbeddingPipeline(vectorStore, embeddingProvider, createLogger('embedding-pipeline', config.logLevel));
+    memoryManager = new MemoryManager(
+      db,
+      vectorStore,
+      embeddingPipeline,
+      embeddingProvider,
+      gatekeeper,
+      auditLog,
+      createLogger('memory-manager', config.logLevel),
+      config
+    );
+  } catch (memErr: any) {
+    logger.warn({ err: memErr?.message }, 'MemoryManager could not be fully initialized in openCliContext');
+  }
+
   return {
     config,
     logger,
     db,
     queue,
     auditLog,
+    vectorStore,
+    memoryManager,
   };
 }
 

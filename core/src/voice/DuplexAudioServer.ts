@@ -159,21 +159,9 @@ export class DuplexAudioServer {
           silenceSamples = 0;
 
           try {
-            // Write WAV file
-            const scratchDir = path.resolve(this.config.projectRoot, 'core/test/fixtures');
-            if (!fs.existsSync(scratchDir)) {
-              fs.mkdirSync(scratchDir, { recursive: true });
-            }
-            const inputWavPath = path.join(scratchDir, `duplex_input_${Date.now()}.wav`);
-            const header = this.writeWavHeader(1, sampleRate, 16, audioToProcess.length);
-            fs.writeFileSync(inputWavPath, Buffer.concat([header, audioToProcess]));
-
-            // Run Speech-to-Text (STT)
-            const transcription = await this.transcribe(inputWavPath);
+            // Run Speech-to-Text (STT) directly by streaming PCM buffer via stdin pipe
+            const transcription = await this.transcribePcm(audioToProcess, sampleRate);
             this.logger.info({ transcription }, 'Duplex transcription result');
-
-            // Delete temp input wav
-            try { fs.unlinkSync(inputWavPath); } catch { /* ignore */ }
 
             if (transcription.trim()) {
               // Get response from ModelRouter
@@ -181,6 +169,11 @@ export class DuplexAudioServer {
               this.logger.info({ reply }, 'Duplex response reply');
 
               if (reply.trim() && isProcessing) {
+                const scratchDir = path.resolve(this.config.projectRoot, 'core/test/fixtures');
+                if (!fs.existsSync(scratchDir)) {
+                  fs.mkdirSync(scratchDir, { recursive: true });
+                }
+
                 // Run Text-to-Speech (TTS)
                 const outputWavPath = path.join(scratchDir, `duplex_output_${Date.now()}.wav`);
                 await this.synthesize(reply, outputWavPath);
@@ -218,25 +211,81 @@ export class DuplexAudioServer {
     });
   }
 
+  private async transcribePcm(pcmBuffer: Buffer, sampleRate: number): Promise<string> {
+    const sttScript = path.join(__dirname, 'engines', 'stt_transcribe.py');
+    const args = [
+      sttScript,
+      '--stdin-pcm',
+      '--sample-rate', sampleRate.toString(),
+      '--model-path', this.config.voiceSttModelPath,
+    ];
+    if (process.env.JARVIS_TEST_WAKE_MOCK === 'true') {
+      args.push('--test-mock');
+    }
+
+    return new Promise((resolve) => {
+      const child = spawn('python', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (d) => { stdout += d.toString(); });
+      child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+      child.stdin.write(pcmBuffer);
+      child.stdin.end();
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          this.logger.warn({ code, stderr: stderr.trim() }, 'STT transcription exited with non-zero code');
+          resolve('');
+          return;
+        }
+        try {
+          const lines = stdout.trim().split('\n').map(l => l.trim()).filter(Boolean);
+          const lastLine = lines[lines.length - 1] || '{}';
+          const res = JSON.parse(lastLine);
+          resolve(res.text || '');
+        } catch (err: any) {
+          this.logger.warn({ err: err.message, stdout }, 'Failed to parse STT JSON output');
+          resolve('');
+        }
+      });
+
+      child.on('error', (err) => {
+        this.logger.error({ err: err.message }, 'Failed to spawn STT transcription process');
+        resolve('');
+      });
+    });
+  }
+
   private async transcribe(wavPath: string): Promise<string> {
     const sttScript = path.join(__dirname, 'engines', 'stt_transcribe.py');
     const args = [sttScript, '--wav', wavPath, '--model-path', this.config.voiceSttModelPath];
     if (process.env.JARVIS_TEST_WAKE_MOCK === 'true') {
-      args.push('--force-failure'); // tests fallback path
+      args.push('--test-mock');
     }
 
     return new Promise((resolve) => {
       const child = spawn('python', args);
       let stdout = '';
       child.stdout.on('data', (d) => { stdout += d.toString(); });
-      child.on('close', () => {
+      child.on('close', (code) => {
+        if (code !== 0) {
+          resolve('');
+          return;
+        }
         try {
-          const res = JSON.parse(stdout.trim());
+          const lines = stdout.trim().split('\n').map(l => l.trim()).filter(Boolean);
+          const lastLine = lines[lines.length - 1] || '{}';
+          const res = JSON.parse(lastLine);
           resolve(res.text || '');
         } catch {
           resolve('');
         }
       });
+      child.on('error', () => resolve(''));
     });
   }
 

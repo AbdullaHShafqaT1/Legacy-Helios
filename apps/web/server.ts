@@ -298,6 +298,27 @@ wss.on('connection', async (ws: WebSocket) => {
   const history: { role: string; content: string }[] = [];
   let isAutonomousMode = false;
 
+  // Populate initial history from persisted SQLite memory turns
+  if (cliCtx?.db) {
+    try {
+      const recentRows = cliCtx.db.prepare(`
+        SELECT content FROM memory_entries
+        WHERE tag = 'chat-turn'
+        ORDER BY timestamp ASC
+        LIMIT 30
+      `).all() as { content: string }[];
+      for (const row of recentRows) {
+        if (row.content.startsWith('User: ')) {
+          history.push({ role: 'user', content: row.content.slice(6) });
+        } else if (row.content.startsWith('Jarvis: ')) {
+          history.push({ role: 'assistant', content: row.content.slice(8) });
+        }
+      }
+    } catch (dbErr: any) {
+      logger.warn({ err: dbErr.message }, 'Failed to load chat history from SQLite');
+    }
+  }
+
   const send = (payload: object) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
   };
@@ -386,6 +407,15 @@ wss.on('connection', async (ws: WebSocket) => {
 
     const userText = msg.text.trim();
 
+    // Persist incoming user turn to SQLite via MemoryManager
+    if (cliCtx?.memoryManager) {
+      cliCtx.memoryManager.store({
+        content: `User: ${userText}`,
+        sourceAgent: 'system',
+        tag: 'chat-turn',
+      }).catch(err => logger.warn({ err: err.message }, 'Failed to persist user turn to memory'));
+    }
+
     // 1. Determine if this is an actionable command or conversational chat
     const isExplicitlyTagged = /^[#\[](desktop|coding|research|review|pm|browser|terminal)/i.test(userText);
     const hasDesktopKeywords = /(open|new)\s+tab|active\s+browser|youtube|desktop|screen|click|type|scroll|mouse|hotkey|browser/i.test(userText);
@@ -394,11 +424,24 @@ wss.on('connection', async (ws: WebSocket) => {
     const isActionable = Boolean(cliCtx) && (isExplicitlyTagged || hasDesktopKeywords || isActionVerb);
 
     if (!isActionable) {
+      // Query relevant semantic memories from VectorStore before LLM invocation
+      let memoryContext = '';
+      if (cliCtx?.memoryManager) {
+        try {
+          const memories = await cliCtx.memoryManager.query(userText, { limit: 3 }, 'system');
+          if (memories.length > 0) {
+            memoryContext = `\nRelevant Past Context:\n${memories.map(m => `- ${m.content}`).join('\n')}\n`;
+          }
+        } catch (memErr: any) {
+          logger.warn({ err: memErr.message }, 'Failed to query semantic memories for chat prompt');
+        }
+      }
+
       // Standard Conversational Completion using dynamically active connector
       const turns = history
         .map(h => `${h.role === 'user' ? 'User' : 'Jarvis'}: ${h.content}`)
         .join('\n');
-      const prompt = `${SYSTEM_PROMPT}\n\n${turns}\nUser: ${userText}\nJarvis:`;
+      const prompt = `${SYSTEM_PROMPT}${memoryContext}\n\n${turns}\nUser: ${userText}\nJarvis:`;
 
       send({ type: 'state', state: 'thinking' });
 
@@ -408,6 +451,15 @@ wss.on('connection', async (ws: WebSocket) => {
 
         history.push({ role: 'user', content: userText });
         history.push({ role: 'assistant', content: reply });
+
+        // Persist assistant reply to SQLite via MemoryManager
+        if (cliCtx?.memoryManager) {
+          cliCtx.memoryManager.store({
+            content: `Jarvis: ${reply}`,
+            sourceAgent: 'system',
+            tag: 'chat-turn',
+          }).catch(err => logger.warn({ err: err.message }, 'Failed to persist assistant turn to memory'));
+        }
 
         send({ type: 'reply', text: reply });
       } catch (err: any) {
@@ -528,6 +580,18 @@ wss.on('connection', async (ws: WebSocket) => {
                 replyText = currentTask.result_json;
               }
             }
+
+            history.push({ role: 'user', content: userText });
+            history.push({ role: 'assistant', content: replyText });
+
+            if (cliCtx?.memoryManager) {
+              cliCtx.memoryManager.store({
+                content: `Jarvis: ${replyText}`,
+                sourceAgent: 'system',
+                tag: 'chat-turn',
+              }).catch(err => logger.warn({ err: err.message }, 'Failed to persist task result to memory'));
+            }
+
             send({ type: 'reply', text: replyText });
             send({ type: 'state', state: 'idle' });
             return;

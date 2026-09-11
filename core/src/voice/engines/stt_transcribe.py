@@ -3,7 +3,6 @@ import os
 import argparse
 import json
 import math
-import tempfile
 import numpy as np
 from scipy.io import wavfile
 
@@ -38,26 +37,13 @@ def load_audio_without_ffmpeg(path, target_sr=16000):
 
     return y
 
-def get_fixture_fallback_text(audio_path):
-    if not audio_path:
-        return "fallback transcription", 0.5
-    
-    filename = os.path.basename(audio_path).lower()
-    if "wake" in filename:
-        return "Hey Jarvis", 0.5
-    elif "refactor" in filename:
-        return "submit a task to refactor the database", 0.5
-    elif "approved" in filename:
-        return "yes, approved", 0.5
-    elif "garbage" in filename:
-        return "", 0.5
-    return "fallback transcription", 0.5
-
 def main():
     parser = argparse.ArgumentParser(description="Whisper local STT transcriber")
-    parser.add_argument("--wav", type=str, help="Path to input WAV file")
+    parser.add_argument("--wav", type=str, default="", help="Path to input WAV file")
+    parser.add_argument("--stdin-pcm", action="store_true", help="Read raw 16-bit PCM buffer from stdin")
     parser.add_argument("--duration", type=int, default=5, help="Microphone record duration in seconds")
-    parser.add_argument("--force-failure", action="store_true", help="Force model load failure for testing")
+    parser.add_argument("--force-failure", action="store_true", help="Force model load failure for diagnostics testing")
+    parser.add_argument("--test-mock", action="store_true", help="Return mock transcription for test harness")
     parser.add_argument("--model-path", type=str, default="tiny", help="Path or version of Whisper model")
     parser.add_argument("--input-device", type=str, default="", help="Audio input device name/index")
     parser.add_argument("--sample-rate", type=int, default=16000, help="Audio stream sample rate")
@@ -65,125 +51,117 @@ def main():
 
     force_fail = args.force_failure or (os.environ.get("FORCE_STT_FAILURE") == "true")
 
-    # Try loading whisper model
-    model = None
-    model_loaded = False
-    model_error = "None"
-    
-    if not force_fail:
-        try:
-            import whisper
-            model = whisper.load_model(args.model_path)
-            model_loaded = True
-        except Exception as e:
-            model_error = str(e)
-            print(f"STT Whisper model load failed: {e}. Falling back to fixture/file pattern matching.", file=sys.stderr, flush=True)
+    if force_fail:
+        err_msg = (
+            "Whisper STT model failed to initialize: forced failure flag set. "
+            "Diagnostics: Check FORCE_STT_FAILURE env or --force-failure argument. "
+            "Action: Remove force-failure flag or inspect test harness."
+        )
+        print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+        raise RuntimeError(err_msg)
+
+    if args.test_mock:
+        print(json.dumps({"text": "test transcription", "confidence": 1.0}), flush=True)
+        sys.exit(0)
+
+    # Load whisper model
+    try:
+        import whisper
+        model = whisper.load_model(args.model_path)
+    except Exception as e:
+        err_msg = (
+            f"Whisper STT model failed to load '{args.model_path}': {e}. "
+            "Diagnostics: whisper module import or model weights load failed. "
+            "Action: Run 'pip install openai-whisper torch' and verify network/disk access for Whisper model cache."
+        )
+        print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+        raise RuntimeError(err_msg) from e
+
+    audio_array = None
+
+    if args.stdin_pcm:
+        # Read raw PCM bytes directly from stdin pipe
+        raw_bytes = sys.stdin.buffer.read()
+        if not raw_bytes or len(raw_bytes) == 0:
+            err_msg = "No PCM audio bytes received on stdin pipe."
+            print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+            raise ValueError(err_msg)
+
+        int16_data = np.frombuffer(raw_bytes, dtype=np.int16)
+        if len(int16_data) == 0:
+            err_msg = "Received empty int16 PCM buffer."
+            print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+            raise ValueError(err_msg)
+
+        audio_array = int16_data.astype(np.float32) / 32767.0
+        if args.sample_rate != 16000:
+            duration = len(audio_array) / args.sample_rate
+            num_samples = int(duration * 16000)
+            audio_array = np.interp(
+                np.linspace(0, len(audio_array) - 1, num_samples),
+                np.arange(len(audio_array)),
+                audio_array
+            ).astype(np.float32)
+
+    elif args.wav:
+        if not os.path.exists(args.wav):
+            err_msg = f"Audio WAV file not found: {args.wav}"
+            print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+            raise FileNotFoundError(err_msg)
+        audio_array = load_audio_without_ffmpeg(args.wav, target_sr=16000)
+
     else:
-        model_error = "Forced STT failure flag set."
-        print("STT Whisper forced failure activated. Running fallback path.", file=sys.stderr, flush=True)
-
-    audio_path = args.wav
-    temp_created = False
-
-    if not audio_path:
         # Record from microphone
         try:
             import sounddevice as sd
-            
             sample_rate = args.sample_rate
-            print("Recording started. Please speak...", file=sys.stderr, flush=True)
-            
             device = None
             if args.input_device:
                 try:
                     device = int(args.input_device)
                 except ValueError:
                     device = args.input_device
-
             recording = sd.rec(int(args.duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=device)
             sd.wait()
-            max_amp = np.max(np.abs(recording))
-            avg_energy = np.mean(recording ** 2)
-            print(f"Recording finished. Max amplitude: {max_amp:.6f}, Avg energy: {avg_energy:.6f}", file=sys.stderr, flush=True)
-            
-            # Save to a temp wav file
-            temp_fd, audio_path = tempfile.mkstemp(suffix=".wav")
-            os.close(temp_fd)
-            temp_created = True
-            
-            audio_int16 = (recording * 32767).astype(np.int16)
-            wavfile.write(audio_path, sample_rate, audio_int16)
+            audio_array = recording.flatten()
+            if sample_rate != 16000:
+                duration = len(audio_array) / sample_rate
+                num_samples = int(duration * 16000)
+                audio_array = np.interp(
+                    np.linspace(0, len(audio_array) - 1, num_samples),
+                    np.arange(len(audio_array)),
+                    audio_array
+                ).astype(np.float32)
         except Exception as e:
-            if not model_loaded:
-                # If no microphone hardware and model failed, print fallback
-                print(json.dumps({
-                    "text": "fallback transcription from mic failure", 
-                    "confidence": 0.5,
-                    "fallback": True,
-                    "error": f"Mic record failed and model not loaded: {e}"
-                }), flush=True)
-                sys.exit(0)
-            print(json.dumps({"error": f"Failed to record from microphone: {e}"}))
-            sys.exit(1)
+            err_msg = f"Microphone recording failed: {e}. Diagnostics: Check audio input device connection and permissions."
+            print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+            raise RuntimeError(err_msg) from e
 
     try:
-        if model_loaded:
-            # Load audio into numpy array bypassing ffmpeg executable dependency
-            audio_array = load_audio_without_ffmpeg(audio_path, target_sr=16000)
-            
-            # Transcribe audio array
-            result = model.transcribe(audio_array, fp16=False)
-            
-            # Calculate confidence from avg_logprob
-            segments = result.get('segments', [])
-            if segments:
-                logprobs = [seg.get('avg_logprob', -0.1) for seg in segments]
-                avg_logprob = sum(logprobs) / len(logprobs)
-                confidence = min(1.0, max(0.0, math.exp(avg_logprob)))
-            else:
-                confidence = 1.0
-            
-            text = result.get("text", "").strip()
-            
-            # Print clean result JSON to stdout
-            output = {
-                "text": text,
-                "confidence": round(confidence, 4)
-            }
+        result = model.transcribe(audio_array, fp16=False)
+        segments = result.get('segments', [])
+        if segments:
+            logprobs = [seg.get('avg_logprob', -0.1) for seg in segments]
+            avg_logprob = sum(logprobs) / len(logprobs)
+            confidence = min(1.0, max(0.0, math.exp(avg_logprob)))
         else:
-            # Fallback pattern match
-            text, confidence = get_fixture_fallback_text(audio_path)
-            output = {
-                "text": text,
-                "confidence": round(confidence, 4),
-                "fallback": True,
-                "error": f"Whisper engine unavailable: {model_error}"
-            }
+            confidence = 1.0
 
-        # Cleanup temp file if created
-        if temp_created and audio_path and os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-            except:
-                pass
-
+        text = result.get("text", "").strip()
+        output = {
+            "text": text,
+            "confidence": round(confidence, 4)
+        }
         print(json.dumps(output), flush=True)
         sys.exit(0)
     except Exception as e:
-        # Self-healing transcription fallback check
-        if audio_path:
-            text, confidence = get_fixture_fallback_text(audio_path)
-            output = {
-                "text": text,
-                "confidence": round(confidence, 4),
-                "fallback": True,
-                "error": f"Transcription pipeline exception: {e}"
-            }
-            print(json.dumps(output), flush=True)
-            sys.exit(0)
-            
-        print(json.dumps({"error": f"Transcription failed: {e}"}))
-        sys.exit(1)
+        err_msg = (
+            f"Whisper STT inference failed on audio tensor: {e}. "
+            f"Diagnostics: Audio tensor length={len(audio_array)} samples, Dtype={audio_array.dtype}. "
+            "Action: Verify audio input has non-zero amplitude and GPU/CPU has sufficient memory."
+        )
+        print(json.dumps({"error": err_msg}), file=sys.stderr, flush=True)
+        raise RuntimeError(err_msg) from e
 
 if __name__ == "__main__":
     main()

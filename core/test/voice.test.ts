@@ -305,7 +305,7 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
     await expect(speakPromise).resolves.not.toThrow();
   });
 
-  it('Error Handling: reports fallback when forced STT Whisper fails', async () => {
+  it('Error Handling: raises actionable error when forced STT Whisper fails', async () => {
     const wakeFixture = path.resolve(__dirname, 'fixtures', 'jarvis_wake.wav');
     const sttFixture = path.resolve(__dirname, 'fixtures', 'refactor_task.wav');
 
@@ -316,18 +316,17 @@ describe('LocalAudioEngine Integration (Real Engines)', () => {
 
     await engine.init();
 
-    const transcriptionPromise = new Promise<void>((resolve) => {
-      engine.once('transcription', () => {
-        resolve();
+    const errorPromise = new Promise<Error>((resolve) => {
+      engine.once('error', (err) => {
+        resolve(err);
       });
     });
 
     engine.startListening();
-    await transcriptionPromise;
+    const error = await errorPromise;
     engine.stopListening();
 
-    // Verify the engine flagged and logged the fallback transcription!
-    expect(engine.lastSttFallbackUsed).toBe(true);
+    expect(error.message).toContain('STT process exited with code 1');
   });
 
   it('Error Handling & Spec Fallback: throws error on complete TTS failure and falls back to console log', async () => {

@@ -181,65 +181,166 @@ export class DesktopConnector {
     return { granted: true, correlationId: authorization.correlationId };
   }
 
+  private daemonProcess: any = null;
+  private daemonStarting: Promise<void> | null = null;
+  private lineBuffer = '';
+  private pendingQueue: Array<{
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+    timeout: NodeJS.Timeout;
+  }> = [];
+
+  private async ensureDaemon(): Promise<void> {
+    if (this.daemonProcess && !this.daemonProcess.killed) {
+      return;
+    }
+    if (this.daemonStarting) {
+      return this.daemonStarting;
+    }
+
+    this.daemonStarting = new Promise<void>((resolve, reject) => {
+      const config = loadConfig(false);
+      const scriptPath = path.resolve(config.projectRoot, 'tools/desktop_control.py');
+
+      const proc = spawn('python', [scriptPath, '--daemon'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      this.daemonProcess = proc;
+      this.lineBuffer = '';
+
+      const readyTimeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Desktop background daemon timed out waiting for READY signal.'));
+      }, 10000);
+
+      const cleanup = () => {
+        clearTimeout(readyTimeout);
+        this.daemonStarting = null;
+      };
+
+      proc.stdout?.on('data', (chunk: Buffer) => {
+        this.lineBuffer += chunk.toString();
+        let newlineIndex: number;
+        while ((newlineIndex = this.lineBuffer.indexOf('\n')) !== -1) {
+          const line = this.lineBuffer.slice(0, newlineIndex).trim();
+          this.lineBuffer = this.lineBuffer.slice(newlineIndex + 1);
+
+          if (!line) continue;
+
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.status === 'READY') {
+              cleanup();
+              this.logger.info('Desktop persistent background daemon READY.');
+              resolve();
+              continue;
+            }
+
+            const pending = this.pendingQueue.shift();
+            if (pending) {
+              clearTimeout(pending.timeout);
+              pending.resolve(parsed);
+            }
+          } catch (parseErr) {
+            this.logger.warn({ parseErr, line }, 'Failed to parse JSON response line from desktop daemon');
+          }
+        }
+      });
+
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        this.logger.debug({ stderr: chunk.toString().trim() }, 'Desktop daemon stderr');
+      });
+
+      proc.on('close', (code: number) => {
+        this.logger.warn({ code }, 'Desktop persistent daemon exited');
+        cleanup();
+        this.daemonProcess = null;
+        while (this.pendingQueue.length > 0) {
+          const pending = this.pendingQueue.shift();
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pending.reject(new Error(`Desktop daemon exited unexpectedly with code ${code}`));
+          }
+        }
+      });
+
+      proc.on('error', (err: Error) => {
+        this.logger.error({ err }, 'Desktop persistent daemon failed to spawn');
+        cleanup();
+        this.daemonProcess = null;
+        reject(err);
+      });
+    });
+
+    return this.daemonStarting;
+  }
+
+  stop(): void {
+    if (this.daemonProcess) {
+      try {
+        this.daemonProcess.stdin?.write(JSON.stringify({ action: 'exit' }) + '\n');
+        setTimeout(() => {
+          if (this.daemonProcess) {
+            this.daemonProcess.kill('SIGKILL');
+            this.daemonProcess = null;
+          }
+        }, 300);
+      } catch {
+        this.daemonProcess.kill('SIGKILL');
+        this.daemonProcess = null;
+      }
+    }
+  }
+
   private async executeScript(payload: any): Promise<{
     status?: string;
     executedAt?: [number, number];
     timestamp?: string;
     displayInfo?: any;
     details?: any;
+    base64?: string;
+    width?: number;
+    height?: number;
   } | void> {
     const config = loadConfig(false);
-    const isMouseAction = payload.action?.startsWith('mouse_') ||
-      ['move', 'click', 'doubleclick', 'rightclick', 'drag', 'scroll', 'display_info'].includes(payload.action);
-    const scriptPath = isMouseAction
-      ? path.resolve(config.projectRoot, 'tools/os_mouse_controller.py')
-      : path.resolve(config.projectRoot, 'tools/desktop_control.py');
+    await this.ensureDaemon();
 
-    return await new Promise((resolve, reject) => {
-      const ps = spawn('python', [
-        scriptPath,
-        JSON.stringify(payload)
-      ]);
+    return new Promise((resolve, reject) => {
+      if (!this.daemonProcess || !this.daemonProcess.stdin) {
+        return reject(new Error('Desktop background daemon is not running'));
+      }
 
       const timeout = setTimeout(() => {
-        ps.kill('SIGKILL');
+        const idx = this.pendingQueue.findIndex(p => p.timeout === timeout);
+        if (idx !== -1) {
+          this.pendingQueue.splice(idx, 1);
+        }
         reject(new Error('Desktop interaction command timed out.'));
       }, config.desktopActionTimeoutMs);
 
-      let stdout = '';
-      let stderr = '';
-      ps.stdout?.on('data', (chunk) => {
-        stdout += chunk.toString();
-      });
-      ps.stderr?.on('data', (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      ps.on('close', (code) => {
-        clearTimeout(timeout);
-        if (code === 0) {
-          try {
-            const parsed = JSON.parse(stdout.trim());
+      this.pendingQueue.push({
+        resolve: (parsed: any) => {
+          if (parsed.status === 'FAILED') {
+            reject(new Error(parsed.error || 'Desktop action failed'));
+          } else {
             resolve({
               status: parsed.status,
               executedAt: parsed.executed_at ?? parsed.cursor,
-              timestamp: parsed.timestamp,
+              timestamp: parsed.timestamp || new Date().toISOString(),
               displayInfo: parsed.display,
               details: parsed,
+              base64: parsed.base64,
+              width: parsed.width,
+              height: parsed.height,
             });
-          } catch {
-            resolve();
           }
-        } else {
-          const detail = stderr.trim() || stdout.trim() || 'No error details provided';
-          reject(new Error(`Desktop script failed with code ${code}. Detail: ${detail}`));
-        }
+        },
+        reject,
+        timeout,
       });
 
-      ps.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
+      this.daemonProcess.stdin.write(JSON.stringify(payload) + '\n');
     });
   }
 

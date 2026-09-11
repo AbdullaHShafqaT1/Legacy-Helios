@@ -9,6 +9,11 @@ import fs from 'node:fs';
 import { AgentRole } from '../../core/src/permissions/policy.js';
 import { CoordinateResolutionService } from '../../core/src/vision/CoordinateResolutionService.js';
 
+export interface DesktopOperatorOptions {
+  hoverDwellMs?: number;
+  postClickWaitMs?: number;
+}
+
 export class DesktopOperatorAgent implements Agent {
   readonly name = 'desktop-operator';
   private readonly modelRouter: ModelRouter;
@@ -17,6 +22,10 @@ export class DesktopOperatorAgent implements Agent {
   private readonly logger: Logger;
   private readonly messageRouter?: MessageRouter;
   private readonly coordinateService: CoordinateResolutionService;
+  private readonly defaultHoverDwellMs: number;
+  private readonly defaultPostClickWaitMs: number;
+
+  private latestObservation: any = null;
 
   constructor(
     modelRouter: ModelRouter,
@@ -24,7 +33,8 @@ export class DesktopOperatorAgent implements Agent {
     memoryManager: MemoryManager,
     logger: Logger,
     messageRouter?: MessageRouter,
-    coordinateService?: CoordinateResolutionService
+    coordinateService?: CoordinateResolutionService,
+    options?: DesktopOperatorOptions
   ) {
     this.modelRouter = modelRouter;
     this.desktopConnector = desktopConnector;
@@ -32,6 +42,8 @@ export class DesktopOperatorAgent implements Agent {
     this.logger = logger;
     this.messageRouter = messageRouter;
     this.coordinateService = coordinateService || new CoordinateResolutionService();
+    this.defaultHoverDwellMs = options?.hoverDwellMs ?? 400;
+    this.defaultPostClickWaitMs = options?.postClickWaitMs ?? 2000;
   }
 
   async process(input: AgentTaskInput): Promise<AgentResult> {
@@ -40,7 +52,7 @@ export class DesktopOperatorAgent implements Agent {
 
     try {
       try {
-        await this.desktopConnector.captureScreen(this.name as AgentRole);
+        this.latestObservation = await this.desktopConnector.captureScreen(this.name as AgentRole);
       } catch {
         // Soft fail if screen capture is not fully initialized, wait for actual failure in the connector
       }
@@ -107,7 +119,7 @@ Rules:
 
       // Re-capture screen observation right before executing actions so coordinate validations have fresh observation context
       try {
-        await this.desktopConnector.captureScreen(role);
+        this.latestObservation = await this.desktopConnector.captureScreen(role);
       } catch {
         // Soft fail if screen capture is not fully initialized
       }
@@ -137,7 +149,7 @@ Rules:
         
         switch (action.action) {
           case 'mouse_click': {
-            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const obs = this.latestObservation || (this.desktopConnector as any).visionConnector?.lastObservation;
             const w = obs?.width || 2560;
             const h = obs?.height || 1440;
             const coords = this.coordinateService.resolve(action, w, h);
@@ -148,7 +160,7 @@ Rules:
             break;
           }
           case 'mouse_move': {
-            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const obs = this.latestObservation || (this.desktopConnector as any).visionConnector?.lastObservation;
             const w = obs?.width || 2560;
             const h = obs?.height || 1440;
             const coords = this.coordinateService.resolve(action, w, h);
@@ -158,7 +170,7 @@ Rules:
             break;
           }
           case 'mouse_drag': {
-            const obs = (this.desktopConnector as any).visionConnector?.lastObservation;
+            const obs = this.latestObservation || (this.desktopConnector as any).visionConnector?.lastObservation;
             const w = obs?.width || 2560;
             const h = obs?.height || 1440;
             const start = this.coordinateService.resolvePoint(
@@ -199,21 +211,53 @@ Rules:
           case 'click_visual':
           case 'click_element':
           case 'click_video':
-          case 'click_first_video':
+          case 'click_first_video': {
+            const obs = this.latestObservation || (this.desktopConnector as any).visionConnector?.lastObservation;
+            const w = obs?.width || 2560;
+            const h = obs?.height || 1440;
+            const hasDirectCoords = action.x !== undefined && action.y !== undefined;
+            const directCoords = hasDirectCoords ? this.coordinateService.resolve(action, w, h) : undefined;
             const targetDesc = action.target || action.description || 'first recommended video thumbnail';
-            result = await this.executeVisualClickWithVerification(targetDesc, role, action.max_retries, action.post_click_wait_ms);
+            const skipHover = action.skip_hover === true || (hasDirectCoords && (action.confidence ?? 1.0) >= 0.8 && action.skip_hover !== false);
+            const skipVerification = action.skip_verification === true || (hasDirectCoords && action.skip_verification !== false && action.verify_transition !== true);
+            result = await this.executeVisualClickWithVerification(
+              targetDesc,
+              role,
+              action.max_retries,
+              action.post_click_wait_ms,
+              action.hover_dwell_ms,
+              { directCoords, skipHover, skipVerification }
+            );
             break;
+          }
           case 'move':
             result = await this.desktopConnector.moveMouse(role, action.x, action.y);
             break;
-          case 'click':
-            if (action.verify_transition || (action.target && action.x === undefined && action.y === undefined)) {
+          case 'click': {
+            const hasDirectCoords = action.x !== undefined && action.y !== undefined;
+            if (action.verify_transition || (action.target && !hasDirectCoords)) {
+              const obs = this.latestObservation || (this.desktopConnector as any).visionConnector?.lastObservation;
+              const w = obs?.width || 2560;
+              const h = obs?.height || 1440;
+              const directCoords = hasDirectCoords ? this.coordinateService.resolve(action, w, h) : undefined;
               const targetDesc = action.target || 'video card';
-              result = await this.executeVisualClickWithVerification(targetDesc, role, action.max_retries, action.post_click_wait_ms);
+              result = await this.executeVisualClickWithVerification(
+                targetDesc,
+                role,
+                action.max_retries,
+                action.post_click_wait_ms,
+                action.hover_dwell_ms,
+                {
+                  directCoords,
+                  skipHover: action.skip_hover === true,
+                  skipVerification: action.skip_verification === true
+                }
+              );
             } else {
               result = await this.desktopConnector.click(role, action.x, action.y);
             }
             break;
+          }
           case 'doubleclick':
             result = await this.desktopConnector.doubleClick(role, action.x, action.y);
             break;
@@ -515,11 +559,23 @@ Return ONLY JSON with the format:
     targetDesc: string,
     role: AgentRole,
     maxRetries = 2,
-    postClickWaitMs = 2000
+    postClickWaitMs?: number,
+    hoverDwellMs?: number,
+    options?: {
+      directCoords?: { x: number; y: number };
+      skipHover?: boolean;
+      skipVerification?: boolean;
+    }
   ): Promise<DesktopActionResult> {
-    this.logger.info({ targetDesc, maxRetries, postClickWaitMs }, 'Initiating closed-loop visual click verification sequence.');
+    const effectiveHoverDwellMs = options?.skipHover ? 0 : (hoverDwellMs ?? this.defaultHoverDwellMs);
+    const effectivePostClickWaitMs = options?.skipVerification ? 0 : (postClickWaitMs ?? this.defaultPostClickWaitMs);
 
-    let currentCoords: { x: number; y: number } | null = null;
+    this.logger.info(
+      { targetDesc, maxRetries, postClickWaitMs: effectivePostClickWaitMs, hoverDwellMs: effectiveHoverDwellMs, options },
+      'Initiating closed-loop visual click verification sequence.'
+    );
+
+    let currentCoords: { x: number; y: number } | null = options?.directCoords ?? null;
     let lastResult: DesktopActionResult = { status: 'FAILED', message: 'No click attempts completed.' };
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -538,24 +594,26 @@ Return ONLY JSON with the format:
         return moveResult;
       }
 
-      // Hover dwell settling pause (allow preview expansion / title highlight to render)
-      await new Promise(r => setTimeout(r, 400));
-
-      // 3. Visual Target Confirmation: interim screenshot with cursor positioned
       let interimObs: any = null;
-      try {
-        interimObs = await this.desktopConnector.captureScreen(role);
-      } catch (err: any) {
-        this.logger.warn({ err: err?.message }, 'Failed to capture interim hover screenshot; proceeding.');
-      }
+      if (!options?.skipHover && effectiveHoverDwellMs > 0) {
+        // Hover dwell settling pause (allow preview expansion / title highlight to render)
+        await new Promise(r => setTimeout(r, effectiveHoverDwellMs));
 
-      const hoverCheck = await this.confirmVisualTargetHover(interimObs, targetDesc, currentCoords);
-      this.logger.info({ hoverCheck }, 'Visual target hover confirmation completed.');
+        // 3. Visual Target Confirmation: interim screenshot with cursor positioned
+        try {
+          interimObs = await this.desktopConnector.captureScreen(role);
+        } catch (err: any) {
+          this.logger.warn({ err: err?.message }, 'Failed to capture interim hover screenshot; proceeding.');
+        }
 
-      if (hoverCheck.adjustedCoordinates) {
-        currentCoords = hoverCheck.adjustedCoordinates;
-        await this.desktopConnector.moveMouse(role, currentCoords.x, currentCoords.y);
-        await new Promise(r => setTimeout(r, 200));
+        const hoverCheck = await this.confirmVisualTargetHover(interimObs, targetDesc, currentCoords);
+        this.logger.info({ hoverCheck }, 'Visual target hover confirmation completed.');
+
+        if (hoverCheck.adjustedCoordinates) {
+          currentCoords = hoverCheck.adjustedCoordinates;
+          await this.desktopConnector.moveMouse(role, currentCoords.x, currentCoords.y);
+          await new Promise(r => setTimeout(r, Math.min(200, effectiveHoverDwellMs)));
+        }
       }
 
       // 4. Reliable Click Registration: explicit dwell time (mouseDown, 50ms, mouseUp)
@@ -565,9 +623,19 @@ Return ONLY JSON with the format:
         return lastResult;
       }
 
-      // 5. Post-Click Verification Loop: pause 2 seconds and inspect transition
-      this.logger.info(`Pausing ${postClickWaitMs}ms for screen to transition to video player...`);
-      await new Promise(r => setTimeout(r, postClickWaitMs));
+      // If post-click verification is skippable (e.g. high-confidence direct coordinate action), return immediately
+      if (options?.skipVerification || effectivePostClickWaitMs <= 0) {
+        this.logger.info('Post-click verification skipped due to configuration or direct coordinates.');
+        return {
+          status: 'SUCCESS',
+          message: `Direct click executed successfully at (${currentCoords.x}, ${currentCoords.y}) without post-click wait.`,
+          screenshotPathBefore: interimObs?.screenshotPath,
+        };
+      }
+
+      // 5. Post-Click Verification Loop: pause and inspect transition
+      this.logger.info(`Pausing ${effectivePostClickWaitMs}ms for screen to transition to video player...`);
+      await new Promise(r => setTimeout(r, effectivePostClickWaitMs));
 
       let postClickObs: any = null;
       try {
