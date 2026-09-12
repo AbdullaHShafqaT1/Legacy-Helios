@@ -12,7 +12,7 @@ let currentState = STATE.IDLE;
 let ws           = null;
 let recognition  = null;
 let speaking     = false;
-let autoListenActive = true;
+let autoListenActive = false; // VOICE DISABLED — text-only mode
 
 // ── DOM refs ──────────────────────────────────────────────────
 const orbWrap       = document.getElementById('orb-wrap');
@@ -61,7 +61,7 @@ function getStoredModelConfig() {
     ollamaModel: 'llava:latest',
     lmstudioModel: 'local-model',
     apiKey: '',
-    apiModel: 'gemini-2.5-flash',
+    apiModel: 'gemini-3.6-flash',
     customUrl: 'http://localhost:8000/v1',
   };
 }
@@ -248,34 +248,10 @@ function typewrite(el, text, speed = 18) {
   }, speed);
 }
 
-// ── Text-to-speech (browser native) ──────────────────────────
-function speakText(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-
-  // Pick a clear voice if available
-  const voices  = window.speechSynthesis.getVoices();
-  const desired = voices.find(v =>
-    v.name.includes('Google UK English Male') ||
-    v.name.includes('David')                   ||
-    v.name.includes('Daniel')
-  );
-  if (desired) utt.voice = desired;
-
-  utt.rate   = 1.0;
-  utt.pitch  = 0.9;
-  utt.volume = 1.0;
-  utt.onstart = () => setState(STATE.SPEAKING);
-  utt.onend   = () => {
-    if (!speaking) setState(STATE.IDLE);
-    if (autoListenActive && recognition) {
-      setTimeout(() => {
-        try { recognition.start(); } catch {}
-      }, 400);
-    }
-  };
-  window.speechSynthesis.speak(utt);
+// ── Text-to-speech — DISABLED (text-only mode) ──────────────
+function speakText(_text) {
+  // Voice output disabled — Jarvis responds via text only
+  setState(STATE.IDLE);
 }
 
 // ── Voice input (Web Speech API) ─────────────────────────────
@@ -433,7 +409,7 @@ function updateActiveModelBadge() {
   } else if (p === 'lmstudio') {
     modelNameDisplay.textContent = providerConfig.lmstudioModel || 'local-model';
   } else if (p === 'api_key') {
-    modelNameDisplay.textContent = providerConfig.apiModel || 'gemini-2.5-flash';
+    modelNameDisplay.textContent = providerConfig.apiModel || 'gemini-3.6-flash';
   } else if (p === 'custom_url') {
     try {
       const url = new URL(providerConfig.customUrl || 'http://localhost:8000');
@@ -527,7 +503,7 @@ async function dispatchProviderChange() {
   let targetModel = '';
   if (providerConfig.provider === 'ollama') targetModel = providerConfig.ollamaModel || 'llava:latest';
   else if (providerConfig.provider === 'lmstudio') targetModel = providerConfig.lmstudioModel || 'local-model';
-  else if (providerConfig.provider === 'api_key') targetModel = 'gemini-2.5-flash';
+  else if (providerConfig.provider === 'api_key') targetModel = 'gemini-3.6-flash';
   else if (providerConfig.provider === 'custom_url') targetModel = 'custom-model';
 
   const payload = {

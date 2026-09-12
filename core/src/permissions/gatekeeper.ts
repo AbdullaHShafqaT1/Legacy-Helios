@@ -60,6 +60,9 @@ export class PermissionGatekeeper {
     this.approvalPrompt = approvalPrompt;
     this.policyMap = JSON.parse(JSON.stringify(policyMap));
     this.highFrictionPrompt = highFrictionPrompt || createHighFrictionApprovalPrompt();
+    if (process.env.JARVIS_AUTONOMOUS_MODE === 'true') {
+      this.setAutonomousMode(true);
+    }
   }
 
   /**
