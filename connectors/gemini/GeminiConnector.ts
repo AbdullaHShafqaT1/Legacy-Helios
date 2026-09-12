@@ -34,8 +34,8 @@ export class GeminiConnector implements ModelRoute {
       throw new GeminiConnectorError('API key must be provided.');
     }
     this.apiKey = options.apiKey.trim();
-    const initialModel = options.model ?? 'gemini-2.5-flash';
-    this.model = initialModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : initialModel;
+    const initialModel = options.model ?? 'gemini-3.6-flash';
+    this.model = (initialModel === 'gemini-1.5-flash' || initialModel === 'gemini-2.5-flash') ? 'gemini-3.6-flash' : initialModel;
     this.maxRetries = options.maxRetries ?? 3;
     this.timeoutMs = options.timeoutMs ?? 60000;
     this.logger = options.logger;
@@ -53,7 +53,7 @@ export class GeminiConnector implements ModelRoute {
   setModel(model: string): void {
     if (model && model.trim()) {
       const trimmed = model.trim();
-      this.model = trimmed === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : trimmed;
+      this.model = (trimmed === 'gemini-1.5-flash' || trimmed === 'gemini-2.5-flash') ? 'gemini-3.6-flash' : trimmed;
     }
   }
 
@@ -65,7 +65,7 @@ export class GeminiConnector implements ModelRoute {
    * Validates an API key against Google's Generative Language API.
    * Directly queries the models list endpoint to confirm key validity independent of specific model tags.
    */
-  static async validateApiKey(apiKey: string, model = 'gemini-2.5-flash'): Promise<{ valid: boolean; error?: string }> {
+  static async validateApiKey(apiKey: string, model = 'gemini-3.6-flash'): Promise<{ valid: boolean; error?: string }> {
     if (!apiKey || !apiKey.trim()) {
       return { valid: false, error: 'API key cannot be empty.' };
     }
@@ -91,7 +91,7 @@ export class GeminiConnector implements ModelRoute {
       clearTimeout(timer);
       // 2. Fallback to SDK getGenerativeModel token count if fetch was aborted/failed
       try {
-        const normalizedModel = model === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : model;
+        const normalizedModel = (model === 'gemini-1.5-flash' || model === 'gemini-2.5-flash') ? 'gemini-3.6-flash' : model;
         const client = new GoogleGenerativeAI(key);
         const genModel = client.getGenerativeModel({ model: normalizedModel });
         await genModel.countTokens('validation test');

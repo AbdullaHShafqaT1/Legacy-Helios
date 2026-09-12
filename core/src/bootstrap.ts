@@ -92,8 +92,8 @@ export function openCliContext(loggerName = 'jarvis-cli'): CliContext {
   try {
     const gatekeeper = new PermissionGatekeeper(
       auditLog,
-      { requestApproval: async () => true },
-      createLogger('gatekeeper', config.logLevel)
+      createLogger('gatekeeper', config.logLevel),
+      async () => true
     );
     vectorStore = new SqliteVectorStore(config.vectorStorePath, createLogger('vector-store', config.logLevel));
     const embeddingProvider = new LocalEmbeddingProvider(config.embeddingDimensions);
@@ -182,7 +182,7 @@ export function bootstrap(approvalPrompt: ApprovalPrompt, loggerName = 'jarvis',
   if (geminiKey) {
     const geminiConnector = new GeminiConnector({
       apiKey: geminiKey,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       maxRetries: config.maxRetries,
       timeoutMs: config.claudeTimeoutMs,
       logger: createLogger('gemini-connector', config.logLevel),

@@ -29,19 +29,30 @@ try {
   logger.warn({ err: err.message }, 'Failed to initialize database/queue context in web server');
 }
 
-let activeProvider = (process.env.JARVIS_MODEL_PROVIDER as string) || 'ollama';
-let activeModel = MODEL;
-let activeBaseUrl = BASE_URL;
+let activeProvider = (process.env.JARVIS_MODEL_PROVIDER as string) || (process.env.GEMINI_API_KEY ? 'api_key' : 'ollama');
 let activeApiKey = process.env.GEMINI_API_KEY || '';
+let activeModel = (activeProvider === 'api_key' || activeProvider === 'gemini') ? 'gemini-3.6-flash' : MODEL;
+let activeBaseUrl = BASE_URL;
 let activeCustomUrl = process.env.JARVIS_CUSTOM_ENDPOINT_URL || '';
 
-let activeConnector: ModelRoute = new OllamaConnector({
-  model: MODEL,
-  baseUrl: BASE_URL,
-  maxRetries: 2,
-  timeoutMs: 120_000,
-  logger: pino({ level: 'warn' }),
-});
+let activeConnector: ModelRoute;
+if ((activeProvider === 'api_key' || activeProvider === 'gemini') && activeApiKey) {
+  activeConnector = new GeminiConnector({
+    apiKey: activeApiKey,
+    model: activeModel || 'gemini-3.6-flash',
+    maxRetries: 2,
+    timeoutMs: 60_000,
+    logger: pino({ level: 'warn' }),
+  });
+} else {
+  activeConnector = new OllamaConnector({
+    model: MODEL,
+    baseUrl: BASE_URL,
+    maxRetries: 2,
+    timeoutMs: 120_000,
+    logger: pino({ level: 'warn' }),
+  });
+}
 
 function switchProvider(payload: {
   provider: string;
@@ -77,7 +88,7 @@ function switchProvider(payload: {
   } else if (activeProvider === 'api_key' || activeProvider === 'gemini') {
     activeConnector = new GeminiConnector({
       apiKey: activeApiKey,
-      model: activeModel || 'gemini-2.5-flash',
+      model: activeModel || 'gemini-3.6-flash',
       maxRetries: 2,
       timeoutMs: 60_000,
       logger: pino({ level: 'warn' }),
